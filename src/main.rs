@@ -5,6 +5,7 @@ use dotenv::dotenv;
 mod bot;
 mod messages;
 mod rpg;
+mod keyboards;
 
 #[tokio::main]
 async fn main() {
