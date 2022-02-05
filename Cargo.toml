@@ -1,0 +1,18 @@
+[package]
+authors = ["Awiteb <awiteb@hotmail.com>"]
+description = "Telegram bot help you to run Rust code in Telegram via Rust playground"
+edition = "2021"
+homepage = "https://github.com/TheAwiteb/rpg_bot"
+name = "rpg_bot"
+readme = "README.md"
+repository = "https://github.com/TheAwiteb/rpg_bot"
+version = "0.1.0"
+
+[dependencies]
+dotenv = "0.15.0"
+log = "0.4.8"
+pretty_env_logger = "0.4.0"
+reqwest = {version = "0.11.2", features = ["json"]}
+serde = "1.0.136"
+teloxide = {vesion = "0.5.3", features = ["macros", "auto-send"]}
+tokio = {version = "1.16.1", features = ["rt-multi-thread", "macros"]}
