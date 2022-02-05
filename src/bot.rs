@@ -1,4 +1,4 @@
-use crate::{messages, rpg};
+use crate::{messages, rpg, keyboards};
 use std::error::Error;
 use teloxide::payloads::SendMessageSetters;
 use teloxide::utils::command::parse_command;
@@ -241,6 +241,7 @@ pub async fn main_handler(
                     cx.reply_to(messages::START_MESSAGE)
                         .parse_mode(ParseMode::MarkdownV2)
                         .disable_web_page_preview(true)
+                        .reply_markup(keyboards::repo_keyboard())
                         .send()
                         .await?;
                 };
