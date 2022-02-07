@@ -10,9 +10,11 @@ version = "0.1.0"
 
 [dependencies]
 dotenv = "0.15.0"
-log = "0.4.8"
+log = "0.4.14"
 pretty_env_logger = "0.4.0"
-reqwest = {version = "0.11.2", features = ["json"]}
+reqwest = {version = "0.11.9", features = ["json"]}
 serde = "1.0.136"
-teloxide = {vesion = "0.5.3", features = ["macros", "auto-send"]}
+teloxide = {version = "0.5.3", features = ["macros", "auto-send"]}
 tokio = {version = "1.16.1", features = ["rt-multi-thread", "macros"]}
+tokio-stream = "0.1.8"
+futures = "0.3.21"
