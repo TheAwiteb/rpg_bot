@@ -55,19 +55,28 @@ impl Default for RunReq {
     }
 }
 
-impl From<Code> for RunReq {
-    fn from(code: Code) -> Self {
+impl From<&Code> for RunReq {
+    fn from(code: &Code) -> Self {
         Self {
-            code: code.source_code,
-            channel: code.version,
-            mode: code.mode,
-            edition: code.edition,
+            code: code.source_code.clone(),
+            channel: code.version.clone(),
+            mode: code.mode.clone(),
+            edition: code.edition.clone(),
             ..Self::default()
         }
     }
 }
 
 impl Code {
+    pub fn new(source_code: String, version: String, mode: String, edition: String) -> Self {
+        Self {
+            source_code,
+            version,
+            mode,
+            edition,
+        }
+    }
+
     pub fn is_valid(&self) -> Result<bool, String> {
         if !["stable", "beta", "nightly"].contains(&self.version.to_ascii_lowercase().as_str()) {
             return Err(format!(
@@ -104,7 +113,7 @@ impl Default for Code {
 }
 
 /// Returns Rust playground url for the given code
-pub async fn share(code: Code) -> Result<String, Box<dyn Error + Send + Sync>> {
+pub async fn share(code: &Code) -> Result<String, Box<dyn Error + Send + Sync>> {
     let mut req_json = HashMap::new();
     req_json.insert("code", &code.source_code);
 
@@ -126,7 +135,7 @@ pub async fn share(code: Code) -> Result<String, Box<dyn Error + Send + Sync>> {
 }
 
 /// Run the given code in Rust playground and return the output
-pub async fn run(code: Code) -> Result<String, Box<dyn Error + Send + Sync>> {
+pub async fn run(code: &Code) -> Result<String, Box<dyn Error + Send + Sync>> {
     let req = RunReq::from(code);
     let client = reqwest::Client::new();
     let res: RunRes = client.post(RUN_URL).json(&req).send().await?.json().await?;
