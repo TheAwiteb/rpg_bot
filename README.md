@@ -74,7 +74,12 @@
 </details>
 
 ## Requirements
-[Rust](https://rust-lang.org/) or [Docker](https://docker.com) as you want to build the bot
+* With Cargo
+  * [Rust](https://rust-lang.org/)
+  * [Diesel CLI](https://crates.io/crates/diesel_cli)
+
+* With Docker
+  * [Docker](https://docker.com)
 
 ## Bot interface
 
@@ -99,6 +104,7 @@ sudo docker build . -t rpg_bot
 ```bash
 git clone https://github.com/TheAwiteb/rpg_bot
 cd rpg_bot
+diesel migration run
 cargo build --release
 ```
 
@@ -115,13 +121,13 @@ cargo run --release
 
 ## Images
 ### Help Message
-![help_message](https://i.suar.me/nzYza/s)
+[![help_message](https://i.suar.me/nzYza/s)](https://i.suar.me/nzYza)
 
 ### Run Command
-![run_command](https://i.suar.me/aZ6mz/s)
+[![run_command](https://i.suar.me/aZ6mz/s)](https://i.suar.me/aZ6mz)
 
 ### Share Command
-![share_command](https://i.suar.me/289jQ/s)
+[![share_command](https://i.suar.me/289jQ/s)](https://i.suar.me/289jQ)
 
 ## License
-RPG_BOT is under the MIT license. See the [LICENSE](LICENSE) file for details.
+The [GNU Affero General Public](https://www.gnu.org/licenses/agpl-3.0.en.html) License is a free, copyleft license for software and other kinds of works, specifically designed to ensure cooperation with the community in the case of network server software.
