@@ -234,7 +234,7 @@ pub async fn share_run_answer_message(
     if let Err(err) = code.is_valid() {
         cx.reply_to(err).send().await?;
     } else {
-        let message: Message = replay_wait_message(&cx, &command).await?;
+        let message: Message = replay_wait_message(cx, command).await?;
         share_run_answer(&cx.requester, command, false, message, code).await?;
     }
     Ok(())
