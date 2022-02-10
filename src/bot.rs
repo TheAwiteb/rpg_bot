@@ -399,59 +399,56 @@ pub async fn command_handler(
 }
 
 pub async fn message_handler(cx: UpdateWithCx<AutoSend<Bot>, Message>) {
-    match cx.update.text() {
-        Some(text) => {
-            if let Some((command, args)) = parse_command(text, bot_username(&cx.requester).await) {
-                // Is command
-                let command: String = command.to_ascii_lowercase();
-                if ["run".into(), "share".into()].contains(&command) {
-                    let args: Vec<String> = get_args(args);
-                    if command == "run" {
-                        command_handler(
-                            cx,
-                            Command::Run {
-                                version: args[0].clone(),
-                                mode: args[1].clone(),
-                                edition: args[2].clone(),
-                            },
-                        )
-                        .await
-                        .unwrap();
-                    } else {
-                        command_handler(
-                            cx,
-                            Command::Share {
-                                version: args[0].clone(),
-                                mode: args[1].clone(),
-                                edition: args[2].clone(),
-                            },
-                        )
-                        .await
-                        .unwrap();
-                    };
-                } else if command == "help" {
-                    if args.len() > 0 && args[0] == "run" {
-                        cx.reply_to(messages::RUN_HELP).send().await.unwrap();
-                    } else if args.len() > 0 && args[0] == "share" {
-                        cx.reply_to(messages::SHARE_HELP).send().await.unwrap();
-                    } else {
-                        cx.reply_to(Command::descriptions()).send().await.unwrap();
-                    }
-                } else if command == "start" {
-                    cx.reply_to(messages::START_MESSAGE)
-                        .parse_mode(ParseMode::MarkdownV2)
-                        .disable_web_page_preview(true)
-                        .reply_markup(keyboards::repo_keyboard())
-                        .send()
-                        .await
-                        .unwrap();
+    if let Some(text) = cx.update.text() {
+        if let Some((command, args)) = parse_command(text, bot_username(&cx.requester).await) {
+            // Is command
+            let command: String = command.to_ascii_lowercase();
+            if ["run".into(), "share".into()].contains(&command) {
+                let args: Vec<String> = get_args(args);
+                if command == "run" {
+                    command_handler(
+                        cx,
+                        Command::Run {
+                            version: args[0].clone(),
+                            mode: args[1].clone(),
+                            edition: args[2].clone(),
+                        },
+                    )
+                    .await
+                    .unwrap();
+                } else {
+                    command_handler(
+                        cx,
+                        Command::Share {
+                            version: args[0].clone(),
+                            mode: args[1].clone(),
+                            edition: args[2].clone(),
+                        },
+                    )
+                    .await
+                    .unwrap();
                 };
-            } else {
-                // Not command (Text)
+            } else if command == "help" {
+                if args.len() > 0 && args[0] == "run" {
+                    cx.reply_to(messages::RUN_HELP).send().await.unwrap();
+                } else if args.len() > 0 && args[0] == "share" {
+                    cx.reply_to(messages::SHARE_HELP).send().await.unwrap();
+                } else {
+                    cx.reply_to(Command::descriptions()).send().await.unwrap();
+                }
+            } else if command == "start" {
+                cx.reply_to(messages::START_MESSAGE)
+                    .parse_mode(ParseMode::MarkdownV2)
+                    .disable_web_page_preview(true)
+                    .reply_markup(keyboards::repo_keyboard())
+                    .send()
+                    .await
+                    .unwrap();
             };
-        }
-        None => (),
-    };
+        } else {
+            // Not command (Text)
+        };
+    }
 }
 
 pub async fn callback_handler(cx: UpdateWithCx<AutoSend<Bot>, CallbackQuery>) {
