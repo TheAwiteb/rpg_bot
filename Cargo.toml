@@ -9,7 +9,10 @@ repository = "https://github.com/TheAwiteb/rpg_bot"
 version = "0.1.0"
 
 [dependencies]
+chrono = "0.4.19"
+diesel = {version = "1.4.4", features = ["sqlite", "chrono"]}
 dotenv = "0.15.0"
+futures = "0.3.21"
 log = "0.4.14"
 pretty_env_logger = "0.4.0"
 reqwest = {version = "0.11.9", features = ["json"]}
@@ -17,4 +20,3 @@ serde = "1.0.136"
 teloxide = {version = "0.5.3", features = ["macros", "auto-send"]}
 tokio = {version = "1.16.1", features = ["rt-multi-thread", "macros"]}
 tokio-stream = "0.1.8"
-futures = "0.3.21"

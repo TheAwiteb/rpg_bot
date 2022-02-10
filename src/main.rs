@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate diesel;
+
 use dotenv::dotenv;
 use teloxide::{dispatching::Dispatcher, prelude::*};
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -5,7 +8,10 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 mod bot;
 mod keyboards;
 mod messages;
+mod models;
 mod rpg;
+mod rpg_db;
+mod schema;
 
 #[tokio::main]
 async fn main() {
