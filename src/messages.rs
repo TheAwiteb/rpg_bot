@@ -1,3 +1,21 @@
+// rpg_bot - Telegram bot help you to run Rust code in Telegram via Rust playground
+// Source code: <https://github.com/TheAwiteb/rpg_bot>
+//
+// Copyright (C) 2022 TheAwiteb <awiteb@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 pub const RUN_HELP: &str = r#"Reply to message with this command to execute Rust code 🦀⚙️
     /run <version (default: stable)> <mode (default: debug)> <edition (default: 2021)>
     Example:
