@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+use crate::messages;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 pub fn repo_keyboard() -> InlineKeyboardMarkup {
@@ -78,13 +79,18 @@ pub fn view_run_keyboard(
     mode: &str,
     edition: &str,
     already_use_keyboard: bool,
+    is_valid_source: bool,
 ) -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new([[InlineKeyboardButton::callback(
         "Run 🦀⚙️".into(),
-        format!(
-            "viewR {} {} {} {}",
-            version, mode, edition, already_use_keyboard
-        ),
+        if is_valid_source {
+            format!(
+                "viewR {} {} {} {}",
+                version, mode, edition, already_use_keyboard
+            )
+        } else {
+            format!("print {}", messages::CANNOT_RUN_INVALID_CODE)
+        },
     )]])
 }
 
@@ -93,13 +99,18 @@ pub fn view_share_keyboard(
     mode: &str,
     edition: &str,
     already_use_keyboard: bool,
+    is_valid_source: bool,
 ) -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new([[InlineKeyboardButton::callback(
         "Share 🦀🔗".into(),
-        format!(
-            "viewS {} {} {} {}",
-            version, mode, edition, already_use_keyboard
-        ),
+        if is_valid_source {
+            format!(
+                "viewR {} {} {} {}",
+                version, mode, edition, already_use_keyboard
+            )
+        } else {
+            format!("print {}", messages::CANNOT_SHARE_INVALID_CODE)
+        },
     )]])
 }
 
