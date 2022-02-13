@@ -85,6 +85,14 @@ impl From<&Code> for RunReq {
     }
 }
 
+impl RunRes {
+    fn is_valid(&self) -> bool {
+        !self
+            .stderr
+            .contains("error: could not compile `playground` due to previous error")
+    }
+}
+
 impl Code {
     pub fn new(source_code: String, version: String, mode: String, edition: String) -> Self {
         Self {
@@ -130,33 +138,67 @@ impl Default for Code {
     }
 }
 
-/// Returns Rust playground url for the given code
-pub async fn share(code: &Code) -> Result<String, Box<dyn Error + Send + Sync>> {
-    let mut req_json = HashMap::new();
-    req_json.insert("code", &code.source_code);
-
-    let client = reqwest::Client::new();
-    let res: GistRes = client
-        .post(GIST_GEN_URL)
-        .json(&req_json)
+async fn get_run_response(code: &Code) -> Result<RunRes, Box<dyn Error + Send + Sync>> {
+    let body = RunReq::from(code);
+    Ok(reqwest::Client::new()
+        .post(RUN_URL)
+        .json(&body)
         .send()
         .await?
         .json()
-        .await?;
+        .await?)
+}
 
-    let url = format!(
-        "https://play.rust-lang.org/?version={}&mode={}&edition={}&gist={}",
-        code.version, code.mode, code.edition, res.id
-    );
+async fn get_share_response(code: &Code) -> Result<GistRes, Box<dyn Error + Send + Sync>> {
+    let mut req_json = HashMap::new();
+    req_json.insert("code", &code.source_code);
+    Ok(reqwest::Client::new()
+        .post(GIST_GEN_URL)
+        .json(&req_json)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap())
+}
 
-    Ok(url)
+/// Returns Rust playground url for the given code
+pub async fn share(code: &Code) -> Result<String, String> {
+    let res_run: RunRes = get_run_response(code)
+        .await
+        .map_err(|err| format!("{}", err))?;
+
+    if res_run.is_valid() {
+        let res_share: GistRes = get_share_response(code)
+            .await
+            .map_err(|err| format!("{}", err))?;
+        let url = format!(
+            "https://play.rust-lang.org/?version={}&mode={}&edition={}&gist={}",
+            code.version, code.mode, code.edition, res_share.id
+        );
+
+        Ok(url)
+    } else {
+        Err(res_run.stderr.replace(
+            "could not compile `playground` due to previous error",
+            "Source code cannot be shared due to previous errors",
+        ))
+    }
 }
 
 /// Run the given code in Rust playground and return the output
-pub async fn run(code: &Code) -> Result<String, Box<dyn Error + Send + Sync>> {
-    let req = RunReq::from(code);
-    let client = reqwest::Client::new();
-    let res: RunRes = client.post(RUN_URL).json(&req).send().await?.json().await?;
+pub async fn run(code: &Code) -> Result<String, String> {
+    let res: RunRes = get_run_response(code)
+        .await
+        // Returns error as string for send it to user
+        .map_err(|err| format!("{}", err))?;
 
-    Ok(format!("{}\n{}", res.stderr, res.stdout))
+    let output: String = format!("{}\n{}", res.stderr, res.stdout);
+
+    if res.is_valid() {
+        Ok(output)
+    } else {
+        Err(output)
+    }
 }
