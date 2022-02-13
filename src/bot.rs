@@ -65,6 +65,43 @@ pub enum Command {
     },
 }
 
+impl Command {
+    fn args(&self) -> Option<(String, String, String)> {
+        match self {
+            Command::Run {
+                version,
+                mode,
+                edition,
+            } => Some((version.to_string(), mode.to_string(), edition.to_string())),
+            Command::Share {
+                version,
+                mode,
+                edition,
+            } => Some((version.to_string(), mode.to_string(), edition.to_string())),
+            _ => None,
+        }
+    }
+
+    fn name(&self) -> &str {
+        match self {
+            #[allow(unused_variables)]
+            Command::Share {
+                version,
+                mode,
+                edition,
+            } => "share",
+
+            #[allow(unused_variables)]
+            Command::Run {
+                version,
+                mode,
+                edition,
+            } => "run",
+            Command::Help => "help",
+        }
+    }
+}
+
 impl From<(&rpg::Code, &str)> for Command {
     fn from((code, command_name): (&rpg::Code, &str)) -> Command {
         if command_name.to_ascii_lowercase() == String::from("run") {
@@ -93,33 +130,17 @@ pub async fn bot_username(bot: &AutoSend<Bot>) -> String {
         .expect("Bots must have usernames")
 }
 
-fn get_wait_message(command: &Command) -> String {
-    match &command {
-        Command::Run {
-            version,
-            mode,
-            edition,
-        } => {
-            format!(
-                r#"The code is being executed 🦀⚙️
-        Version: {version}
-        Mode: {mode}
-        Edition: {edition}"#
-            )
+/// Returns wait message of command (Run and Share) else return `None`
+fn get_wait_message(command: &Command) -> Option<String> {
+    if let Some((version, mode, edition)) = command.args() {
+        let ditals: String = format!("Version: {version}\nMode: {mode}\nEdition: {edition}");
+        if command.name() == "run" {
+            return Some(format!("The code is being executed 🦀⚙️\n{ditals}"));
+        } else {
+            return Some(format!("Creating a playground URL 🦀🔗\n{ditals}"));
         }
-        Command::Share {
-            version,
-            mode,
-            edition,
-        } => {
-            format!(
-                r#"Creating a playground URL 🦀🔗
-        Version: {version}
-        Mode: {mode}
-        Edition: {edition}"#
-            )
-        }
-        _ => "".into(),
+    } else {
+        None
     }
 }
 
@@ -136,7 +157,8 @@ async fn replay_wait_message(
     cx: &UpdateWithCx<AutoSend<Bot>, Message>,
     command: &Command,
 ) -> Result<Message, Box<dyn Error + Send + Sync>> {
-    let message: String = get_wait_message(command);
+    // TODO: Send error to user (don't use unwrap)
+    let message: String = get_wait_message(command).unwrap();
     Ok(cx.reply_to(message).send().await?)
 }
 
@@ -144,7 +166,8 @@ async fn send_wait_message(
     cx: &UpdateWithCx<AutoSend<Bot>, CallbackQuery>,
     command: &Command,
 ) -> Result<Message, Box<dyn Error + Send + Sync>> {
-    let message: String = get_wait_message(command);
+    // TODO: Send error to user (don't use unwrap)
+    let message: String = get_wait_message(command).unwrap();
     Ok(cx
         .requester
         .send_message(cx.update.clone().message.unwrap().chat_id(), message)
@@ -160,36 +183,37 @@ async fn share_run_answer(
     message: Message,
     code: rpg::Code,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let (output, keyboard): (Option<String>, Option<InlineKeyboardMarkup>) = match command {
-        Command::Run {
-            version,
-            mode,
-            edition,
-        } => (
-            Some(rpg::run(&code).await?),
-            Some(keyboards::view_share_keyboard(
-                version,
-                mode,
-                edition,
+    let (keyboard, output): (InlineKeyboardMarkup, String) = if command.name() == "run" {
+        let output: Result<String, String> = rpg::run(&code).await;
+        (
+            keyboards::view_share_keyboard(
+                &code.version,
+                &code.mode,
+                &code.edition,
                 already_use_keyboard,
-            )),
-        ),
-        Command::Share {
-            version,
-            mode,
-            edition,
-        } => (
-            Some(rpg::share(&code).await?),
-            Some(keyboards::view_run_keyboard(
-                version,
-                mode,
-                edition,
+                output.is_ok(),
+            ),
+            match output {
+                Ok(output) => output,
+                Err(output) => output,
+            },
+        )
+    } else {
+        let output: Result<String, String> = rpg::share(&code).await;
+        (
+            keyboards::view_run_keyboard(
+                &code.version,
+                &code.mode,
+                &code.edition,
                 already_use_keyboard,
-            )),
-        ),
-        _ => (None, None),
+                output.is_ok(),
+            ),
+            match output {
+                Ok(output) => output,
+                Err(output) => output,
+            },
+        )
     };
-    let (output, keyboard): (String, InlineKeyboardMarkup) = (output.unwrap(), keyboard.unwrap());
     requester
         .edit_message_text(
             // For text messages, the actual UTF-8 text of the message, 0-4096 characters
@@ -208,6 +232,7 @@ async fn share_run_answer(
         .reply_markup(keyboard)
         .send()
         .await?;
+
     Ok(())
 }
 
@@ -307,9 +332,9 @@ async fn run_share_callback(
     if let Some(source_code) = get_source_code() {
         let message: Message = cx.update.clone().message.unwrap();
         let keyboard: InlineKeyboardMarkup = if command == "share" {
-            keyboards::view_share_keyboard(&version, &mode, &edition, true)
+            keyboards::view_share_keyboard(&version, &mode, &edition, true, true)
         } else {
-            keyboards::view_run_keyboard(&version, &mode, &edition, true)
+            keyboards::view_run_keyboard(&version, &mode, &edition, true, true)
         };
         try_join!(
             share_run_answer_cllback(cx, command, source_code, version, mode, edition),
@@ -366,33 +391,21 @@ pub async fn command_handler(
     cx: UpdateWithCx<AutoSend<Bot>, Message>,
     command: Command,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    match &command {
-        #[allow(unused_variables)]
-        Command::Run {
-            version,
-            mode,
-            edition,
-        }
-        | Command::Share {
-            version,
-            mode,
-            edition,
-        } => {
-            // Share and Run command need reply message
-            if cx.update.reply_to_message().is_some() {
-                share_run_answer_message(
-                    &cx,
-                    &command,
-                    version.clone(),
-                    mode.clone(),
-                    edition.clone(),
-                )
-                .await?;
-            } else {
-                cx.reply_to(messages::REPLY_MESSAGE).send().await?;
-            };
-        }
-        _ => (),
+    if let Some((version, mode, edition)) = command.args() {
+        // Share and Run command need reply message
+        if cx.update.reply_to_message().is_some() {
+            share_run_answer_message(
+                &cx,
+                &command,
+                version.clone(),
+                mode.clone(),
+                edition.clone(),
+            )
+            .await?;
+        } else {
+            // If there is no reply message
+            cx.reply_to(messages::REPLY_MESSAGE).send().await?;
+        };
     };
 
     Ok(())
