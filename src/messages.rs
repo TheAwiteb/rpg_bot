@@ -28,3 +28,5 @@ pub const START_MESSAGE: &str = "Welcome, with this bot you can run and share ru
 pub const REPLY_MESSAGE: &str = "Use this command in a reply to another message!";
 pub const MESSAGE_CANNOT_REACHED: &str = "The message with the source code cannot be reached ❗";
 pub const ALREADY_USE_KEYBOARD: &str = "The source code is already has run/share it";
+pub const CANNOT_RUN_INVALID_CODE: &str = "Cannot_Run_invalid_source_code_🤨";
+pub const CANNOT_SHARE_INVALID_CODE: &str = "Cannot_share_invalid_source_code_🤨";
