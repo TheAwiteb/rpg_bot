@@ -17,12 +17,13 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use crate::messages;
+use reqwest::Url;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 pub fn repo_keyboard() -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::url(
         "Repository 🦀".to_string(),
-        "https://github.com/TheAwiteb/rpg_bot".to_string(),
+        Url::parse("https://github.com/TheAwiteb/rpg_bot").unwrap(),
     )]])
 }
 
@@ -114,15 +115,15 @@ pub fn view_share_keyboard(
     )]])
 }
 
-pub fn run_keyboard(version: String, mode: String, edition: String) -> InlineKeyboardMarkup {
-    option_keyboard(&version, &mode, &edition).append_row([InlineKeyboardButton::callback(
+pub fn run_keyboard(version: &str, mode: &str, edition: &str) -> InlineKeyboardMarkup {
+    option_keyboard(version, mode, edition).append_row([InlineKeyboardButton::callback(
         "Run 🦀⚙️".into(),
         format!("run {} {} {}", version, mode, edition),
     )])
 }
 
-pub fn share_keyboard(version: String, mode: String, edition: String) -> InlineKeyboardMarkup {
-    option_keyboard(&version, &mode, &edition).append_row([InlineKeyboardButton::callback(
+pub fn share_keyboard(version: &str, mode: &str, edition: &str) -> InlineKeyboardMarkup {
+    option_keyboard(version, mode, edition).append_row([InlineKeyboardButton::callback(
         "Share 🦀🔗".into(),
         format!("share {} {} {}", version, mode, edition),
     )])

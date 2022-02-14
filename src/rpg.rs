@@ -94,12 +94,12 @@ impl RunRes {
 }
 
 impl Code {
-    pub fn new(source_code: String, version: String, mode: String, edition: String) -> Self {
+    pub fn new(source_code: &str, version: &str, mode: &str, edition: &str) -> Self {
         Self {
-            source_code,
-            version,
-            mode,
-            edition,
+            source_code: source_code.to_string(),
+            version: version.to_string(),
+            mode: mode.to_string(),
+            edition: edition.to_string(),
         }
     }
 
