@@ -22,7 +22,7 @@ use std::error::Error;
 use teloxide::payloads::SendMessageSetters;
 use teloxide::utils::command::parse_command;
 use teloxide::{
-    prelude::*,
+    prelude2::*,
     requests::Requester,
     types::{InlineKeyboardMarkup, ParseMode},
     utils::command::BotCommand,
@@ -66,18 +66,18 @@ pub enum Command {
 }
 
 impl Command {
-    fn args(&self) -> Option<(String, String, String)> {
+    fn args(&self) -> Option<(&str, &str, &str)> {
         match self {
             Command::Run {
                 version,
                 mode,
                 edition,
-            } => Some((version.to_string(), mode.to_string(), edition.to_string())),
+            } => Some((version, mode, edition)),
             Command::Share {
                 version,
                 mode,
                 edition,
-            } => Some((version.to_string(), mode.to_string(), edition.to_string())),
+            } => Some((version, mode, edition)),
             _ => None,
         }
     }
@@ -144,7 +144,7 @@ fn get_wait_message(command: &Command) -> Option<String> {
     }
 }
 
-async fn already_use_answer(requester: &AutoSend<Bot>, query_id: String) {
+async fn already_use_answer(requester: &AutoSend<Bot>, query_id: &str) {
     requester
         .answer_callback_query(query_id)
         .text(messages::ALREADY_USE_KEYBOARD)
@@ -154,30 +154,33 @@ async fn already_use_answer(requester: &AutoSend<Bot>, query_id: String) {
 }
 
 async fn replay_wait_message(
-    cx: &UpdateWithCx<AutoSend<Bot>, Message>,
+    bot: &AutoSend<Bot>,
+    chat_id: i64,
+    message_id: i32,
     command: &Command,
 ) -> Result<Message, Box<dyn Error + Send + Sync>> {
     // TODO: Send error to user (don't use unwrap)
     let message: String = get_wait_message(command).unwrap();
-    Ok(cx.reply_to(message).send().await?)
-}
-
-async fn send_wait_message(
-    cx: &UpdateWithCx<AutoSend<Bot>, CallbackQuery>,
-    command: &Command,
-) -> Result<Message, Box<dyn Error + Send + Sync>> {
-    // TODO: Send error to user (don't use unwrap)
-    let message: String = get_wait_message(command).unwrap();
-    Ok(cx
-        .requester
-        .send_message(cx.update.clone().message.unwrap().chat_id(), message)
+    Ok(bot
+        .send_message(chat_id, message)
+        .reply_to_message_id(message_id)
         .send()
         .await?)
 }
 
+async fn send_wait_message(
+    bot: &AutoSend<Bot>,
+    chat_id: i64,
+    command: &Command,
+) -> Result<Message, Box<dyn Error + Send + Sync>> {
+    // TODO: Send error to user (don't use unwrap)
+    let message: String = get_wait_message(command).unwrap();
+    Ok(bot.send_message(chat_id, message).send().await?)
+}
+
 #[allow(unused_variables)]
 async fn share_run_answer(
-    requester: &AutoSend<Bot>,
+    bot: &AutoSend<Bot>,
     command: &Command,
     already_use_keyboard: bool,
     message: Message,
@@ -214,24 +217,23 @@ async fn share_run_answer(
             },
         )
     };
-    requester
-        .edit_message_text(
-            // For text messages, the actual UTF-8 text of the message, 0-4096 characters
-            // https://core.telegram.org/bots/api#message
-            message.chat_id(),
-            message.id,
-            output
-                .chars()
-                .take(if output.chars().count() > 4096 {
-                    4096
-                } else {
-                    output.chars().count()
-                })
-                .collect::<String>(),
-        )
-        .reply_markup(keyboard)
-        .send()
-        .await?;
+    bot.edit_message_text(
+        // For text messages, the actual UTF-8 text of the message, 0-4096 characters
+        // https://core.telegram.org/bots/api#message
+        message.chat_id(),
+        message.id,
+        output
+            .chars()
+            .take(if output.chars().count() > 4096 {
+                4096
+            } else {
+                output.chars().count()
+            })
+            .collect::<String>(),
+    )
+    .reply_markup(keyboard)
+    .send()
+    .await?;
 
     Ok(())
 }
@@ -239,53 +241,48 @@ async fn share_run_answer(
 /// Send code output for run command and Rust playground for share command
 #[allow(unused_variables)]
 pub async fn share_run_answer_message(
-    cx: &UpdateWithCx<AutoSend<Bot>, Message>,
+    bot: &AutoSend<Bot>,
+    message: &Message,
     command: &Command,
-    version: String,
-    mode: String,
-    edition: String,
+    version: &str,
+    mode: &str,
+    edition: &str,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let code: rpg::Code = rpg::Code::new(
-        cx.update
-            .reply_to_message()
-            .unwrap()
-            .text()
-            .unwrap()
-            .to_owned(),
+        message.reply_to_message().unwrap().text().unwrap(),
         version,
         mode,
         edition,
     );
     if let Err(err) = code.is_valid() {
-        cx.reply_to(err).send().await?;
+        bot.send_message(message.chat.id, err)
+            .reply_to_message_id(message.id)
+            .send()
+            .await?;
     } else {
-        let message: Message = replay_wait_message(cx, command).await?;
-        share_run_answer(&cx.requester, command, false, message, code).await?;
+        let message: Message =
+            replay_wait_message(bot, message.chat.id, message.id, command).await?;
+        share_run_answer(bot, command, false, message, code).await?;
     }
     Ok(())
 }
 
 pub async fn share_run_answer_cllback(
-    cx: &UpdateWithCx<AutoSend<Bot>, CallbackQuery>,
+    bot: &AutoSend<Bot>,
+    chat_id: i64,
     command: &str,
-    source_code: String,
-    version: String,
-    mode: String,
-    edition: String,
+    source_code: &str,
+    version: &str,
+    mode: &str,
+    edition: &str,
 ) -> Result<(), RequestError> {
     let code: rpg::Code = rpg::Code::new(source_code, version, mode, edition);
-    let message: Message = send_wait_message(&cx, &Command::from((&code, command)))
+    let message: Message = send_wait_message(bot, chat_id, &Command::from((&code, command)))
         .await
         .unwrap();
-    share_run_answer(
-        &cx.requester,
-        &Command::from((&code, command)),
-        true,
-        message,
-        code,
-    )
-    .await
-    .unwrap();
+    share_run_answer(bot, &Command::from((&code, command)), true, message, code)
+        .await
+        .unwrap();
     Ok(())
 }
 
@@ -314,39 +311,46 @@ fn get_args(args: Vec<&str>) -> Vec<String> {
 }
 
 /// returns None that mean the message is deleted else message content
-fn get_source_code() -> Option<String> {
+fn get_source_code() -> Option<&'static str> {
     // TODO: return source code of message
     None
 }
 
 async fn run_share_callback(
-    cx: &UpdateWithCx<AutoSend<Bot>, CallbackQuery>,
+    bot: &AutoSend<Bot>,
+    callback_query: &CallbackQuery,
     command: &str,
-    version: String,
-    mode: String,
-    edition: String,
+    version: &str,
+    mode: &str,
+    edition: &str,
 ) {
     // share and run commands need source code
     // share and run commands args is <already_use_keyboard>
     // if get_source_code returns None that mean the source code message is deleted
     if let Some(source_code) = get_source_code() {
-        let message: Message = cx.update.clone().message.unwrap();
+        let message: Message = callback_query.clone().message.unwrap();
         let keyboard: InlineKeyboardMarkup = if command == "share" {
-            keyboards::view_share_keyboard(&version, &mode, &edition, true, true)
+            keyboards::view_share_keyboard(version, mode, edition, true, true)
         } else {
-            keyboards::view_run_keyboard(&version, &mode, &edition, true, true)
+            keyboards::view_run_keyboard(version, mode, edition, true, true)
         };
         try_join!(
-            share_run_answer_cllback(cx, command, source_code, version, mode, edition),
-            cx.requester
-                .edit_message_reply_markup(message.chat_id(), message.id)
+            share_run_answer_cllback(
+                bot,
+                message.chat.id,
+                command,
+                source_code,
+                version,
+                mode,
+                edition
+            ),
+            bot.edit_message_reply_markup(message.chat_id(), message.id)
                 .reply_markup(keyboard)
                 .send()
         )
         .unwrap();
     } else {
-        cx.requester
-            .answer_callback_query(cx.update.id.clone())
+        bot.answer_callback_query(&callback_query.id)
             .text(messages::MESSAGE_CANNOT_REACHED)
             .send()
             .await
@@ -355,148 +359,173 @@ async fn run_share_callback(
 }
 
 async fn update_options(
-    cx: &UpdateWithCx<AutoSend<Bot>, CallbackQuery>,
-    version: String,
-    mode: String,
-    edition: String,
-    option_name: String,
-    option_value: String,
+    bot: &AutoSend<Bot>,
+    callback_query: &CallbackQuery,
+    version: &str,
+    mode: &str,
+    edition: &str,
+    option_name: &str,
+    option_value: &str,
 ) {
-    let update: CallbackQuery = cx.update.clone();
-    let message: Message = update.message.unwrap();
+    let message: Message = callback_query.clone().message.unwrap();
+    let old_keybord: &InlineKeyboardMarkup = message.reply_markup().unwrap();
+    let answer = bot
+        .answer_callback_query(&callback_query.id)
+        .text(format!("set {} to {}", option_name, option_value))
+        .send();
 
-    let keyboard: InlineKeyboardMarkup = if message.reply_markup().unwrap().inline_keyboard[4][0]
-        .text
-        .contains("Run")
-    {
+    let keyboard: InlineKeyboardMarkup = if old_keybord.inline_keyboard[4][0].text.contains("Run") {
         keyboards::run_keyboard(version, mode, edition)
     } else {
         keyboards::share_keyboard(version, mode, edition)
     };
-    try_join!(
-        cx.requester
-            .answer_callback_query(update.id)
-            .text(format!("set {} to {}", option_name, option_value))
-            .send(),
-        cx.requester
-            .edit_message_reply_markup(message.chat_id(), message.id)
-            .reply_markup(keyboard)
-            .send()
-    )
-    .unwrap();
+
+    if &keyboard != old_keybord {
+        try_join!(
+            answer,
+            bot.edit_message_reply_markup(message.chat_id(), message.id)
+                .reply_markup(keyboard)
+                .send()
+        )
+        .log_on_error()
+        .await;
+    } else {
+        answer.await.log_on_error().await;
+    }
 }
 
 /// Run and Share command handler
 pub async fn command_handler(
-    cx: UpdateWithCx<AutoSend<Bot>, Message>,
-    command: Command,
+    bot: &AutoSend<Bot>,
+    message: &Message,
+    command: &Command,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     if let Some((version, mode, edition)) = command.args() {
         // Share and Run command need reply message
-        if cx.update.reply_to_message().is_some() {
-            share_run_answer_message(
-                &cx,
-                &command,
-                version.clone(),
-                mode.clone(),
-                edition.clone(),
-            )
-            .await?;
+        if message.reply_to_message().is_some() {
+            share_run_answer_message(bot, message, command, version, mode, edition).await?;
         } else {
             // If there is no reply message
-            cx.reply_to(messages::REPLY_MESSAGE).send().await?;
+            bot.send_message(message.chat.id, messages::REPLY_MESSAGE)
+                .reply_to_message_id(message.id)
+                .send()
+                .await?;
         };
     };
 
     Ok(())
 }
 
-pub async fn message_handler(cx: UpdateWithCx<AutoSend<Bot>, Message>) {
-    if let Some(text) = cx.update.text() {
-        if let Some((command, args)) = parse_command(text, bot_username(&cx.requester).await) {
+pub async fn message_text_handler(
+    message: Message,
+    bot: AutoSend<Bot>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    if let Some(text) = message.text() {
+        if let Some((command, args)) = parse_command(text, bot_username(&bot).await) {
             // Is command
             let command: String = command.to_ascii_lowercase();
             if ["run".into(), "share".into()].contains(&command) {
-                let args: Vec<String> = get_args(args);
+                let mut code_args = get_args(args).into_iter();
                 if command == "run" {
                     command_handler(
-                        cx,
-                        Command::Run {
-                            version: args[0].clone(),
-                            mode: args[1].clone(),
-                            edition: args[2].clone(),
+                        &bot,
+                        &message,
+                        &Command::Run {
+                            version: code_args.next().unwrap(),
+                            mode: code_args.next().unwrap(),
+                            edition: code_args.next().unwrap(),
                         },
                     )
-                    .await
-                    .unwrap();
+                    .await?;
                 } else {
                     command_handler(
-                        cx,
-                        Command::Share {
-                            version: args[0].clone(),
-                            mode: args[1].clone(),
-                            edition: args[2].clone(),
+                        &bot,
+                        &message,
+                        &Command::Share {
+                            version: code_args.next().unwrap(),
+                            mode: code_args.next().unwrap(),
+                            edition: code_args.next().unwrap(),
                         },
                     )
-                    .await
-                    .unwrap();
+                    .await?;
                 };
             } else if command == "help" {
                 if args.len() > 0 && args[0] == "run" {
-                    cx.reply_to(messages::RUN_HELP).send().await.unwrap();
+                    bot.send_message(message.chat.id, messages::RUN_HELP)
+                        .reply_to_message_id(message.id)
+                        .send()
+                        .await?;
                 } else if args.len() > 0 && args[0] == "share" {
-                    cx.reply_to(messages::SHARE_HELP).send().await.unwrap();
+                    bot.send_message(message.chat.id, messages::SHARE_HELP)
+                        .reply_to_message_id(message.id)
+                        .send()
+                        .await?;
                 } else {
-                    cx.reply_to(Command::descriptions()).send().await.unwrap();
+                    bot.send_message(message.chat.id, Command::descriptions())
+                        .reply_to_message_id(message.id)
+                        .send()
+                        .await?;
                 }
             } else if command == "start" {
-                cx.reply_to(messages::START_MESSAGE)
+                bot.send_message(message.chat.id, messages::START_MESSAGE)
+                    .reply_to_message_id(message.id)
                     .parse_mode(ParseMode::MarkdownV2)
                     .disable_web_page_preview(true)
                     .reply_markup(keyboards::repo_keyboard())
                     .send()
-                    .await
-                    .unwrap();
+                    .await?;
             };
         } else {
             // Not command (Text)
         };
     }
+    Ok(())
 }
 
-pub async fn callback_handler(cx: UpdateWithCx<AutoSend<Bot>, CallbackQuery>) {
+pub async fn callback_handler(
+    bot: AutoSend<Bot>,
+    callback_query: CallbackQuery,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     // callback data be like this in all callback
+    //
     // <command> <args> <args> ..
     // viewR <version> <mode> <edition> <already_use_keyboard>
     // viewS <version> <mode> <edition> <already_use_keyboard>
     // already_use
-    // print <word>
+    // print <message_with_underscore>
     // run <version> <mode> <edition>
     // share <version> <mode> <edition>
     // option <version> <mode> <edition> <option_name> <option_value>
 
-    if let Some(callback_data) = cx.update.data.clone() {
-        let args: Vec<&str> = callback_data.split_whitespace().collect();
-        let command: &str = args[0];
-        let args: Vec<&str> = args.into_iter().skip(1).collect();
+    if let Some(callback_data) = callback_query.data.clone() {
+        let mut args = callback_data
+            .split_whitespace()
+            .collect::<Vec<&str>>()
+            .into_iter();
+        let command: &str = args.next().expect("callback_data don't have command");
 
         match command {
             "viewR" | "viewS" => {
                 view_handler(
-                    &cx,
+                    &bot,
+                    &callback_query,
                     command,
-                    args[0].into(),
-                    args[1].into(),
-                    args[2].into(),
-                    args[3].parse().unwrap(),
+                    args.next().expect("viewR/viewS don't have first arg"),
+                    args.next().expect("viewR/viewS don't have second arg"),
+                    args.next().expect("viewR/viewS don't have third arg"),
+                    args.next()
+                        .expect("viewR/viewS don't have fourth arg")
+                        .parse()
+                        .unwrap(),
                 )
                 .await
             }
             "already_use" | "print" => {
-                cx.requester
-                    .answer_callback_query(cx.update.id.clone())
+                bot.answer_callback_query(&callback_query.id)
                     .text(if command == "print" {
-                        args[0].replace('_', " ")
+                        args.next()
+                            .expect("print command don't have message to print it")
+                            .replace('_', " ")
                     } else {
                         messages::ALREADY_USE_KEYBOARD.to_string()
                     })
@@ -505,48 +534,56 @@ pub async fn callback_handler(cx: UpdateWithCx<AutoSend<Bot>, CallbackQuery>) {
                     .unwrap();
             }
             "run" | "share" => {
-                run_share_callback(&cx, command, args[0].into(), args[1].into(), args[2].into())
-                    .await;
+                run_share_callback(
+                    &bot,
+                    &callback_query,
+                    command,
+                    args.next().expect("share/run command don't have version"),
+                    args.next().expect("share/run command don't have mode"),
+                    args.next().expect("share/run command don't have edition"),
+                )
+                .await;
             }
-            // FIXME: rerror appear when I repeatedly press the inline button ( try it after upgrade to 0.6 )
+
             "option" => {
                 update_options(
-                    &cx,
-                    args[0].into(),
-                    args[1].into(),
-                    args[2].into(),
-                    args[3].into(),
-                    args[4].into(),
+                    &bot,
+                    &callback_query,
+                    args.next().expect("option command don't have version"),
+                    args.next().expect("option command don't have mode"),
+                    args.next().expect("option command don't have edition"),
+                    args.next().expect("option command don't have option_name"),
+                    args.next().expect("option command don't have option_value"),
                 )
                 .await
             }
             _ => (),
         };
     }
+    Ok(())
 }
 
 async fn view_handler(
-    cx: &UpdateWithCx<AutoSend<Bot>, CallbackQuery>,
+    bot: &AutoSend<Bot>,
+    callback_query: &CallbackQuery,
     view: &str,
-    version: String,
-    mode: String,
-    edition: String,
+    version: &str,
+    mode: &str,
+    edition: &str,
     already_use_keyboard: bool,
 ) {
-    let update: CallbackQuery = cx.update.clone();
     if already_use_keyboard {
-        already_use_answer(&cx.requester, update.id).await;
+        already_use_answer(bot, &callback_query.id).await;
     } else {
         // unwrap here because every callback query have message 🙂
-        let message: Message = update.message.unwrap();
+        let message: Message = callback_query.clone().message.unwrap();
         let keyboard: InlineKeyboardMarkup = if view == "viewR" {
             keyboards::run_keyboard(version, mode, edition)
         } else {
             keyboards::share_keyboard(version, mode, edition)
         };
 
-        cx.requester
-            .edit_message_reply_markup(message.chat_id(), message.id)
+        bot.edit_message_reply_markup(message.chat_id(), message.id)
             .reply_markup(keyboard)
             .send()
             .await

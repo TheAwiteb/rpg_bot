@@ -20,8 +20,7 @@
 extern crate diesel;
 
 use dotenv::dotenv;
-use teloxide::{dispatching::Dispatcher, prelude::*};
-use tokio_stream::wrappers::UnboundedReceiverStream;
+use teloxide::{dispatching2::UpdateFilterExt, prelude2::*, types::Update};
 
 mod bot;
 mod keyboards;
@@ -38,31 +37,28 @@ async fn main() {
 }
 
 async fn run() {
-    // TODO: Upgrade teloxide to 0.6 🤩
     teloxide::enable_logging!();
     let bot = Bot::from_env().auto_send();
-    let dispatcher: Dispatcher<AutoSend<Bot>> = Dispatcher::new(bot.clone());
 
     log::info!(
         "Starting Rust Playground Bot in @{}",
         bot::bot_username(&bot).await
     );
 
-    dispatcher
-        // message handler
-        .messages_handler(|rx: DispatcherHandlerRx<AutoSend<Bot>, Message>| async {
-            UnboundedReceiverStream::new(rx)
-                .for_each_concurrent(None, bot::message_handler)
-                .await;
-        })
-        // callback handler
-        .callback_queries_handler(
-            |rx: DispatcherHandlerRx<AutoSend<Bot>, CallbackQuery>| async {
-                UnboundedReceiverStream::new(rx)
-                    .for_each_concurrent(None, bot::callback_handler)
-                    .await;
-            },
+    let handler = dptree::entry()
+        // Message branches
+        .branch(
+            Update::filter_message().branch(
+                dptree::filter(|message: Message| message.text().is_some())
+                    .endpoint(bot::message_text_handler),
+            ),
         )
+        // Callback query branch
+        .branch(Update::filter_callback_query().endpoint(bot::callback_handler));
+
+    Dispatcher::builder(bot, handler)
+        .build()
+        .setup_ctrlc_handler()
         .dispatch()
         .await;
 }
