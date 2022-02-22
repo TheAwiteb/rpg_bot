@@ -1,4 +1,4 @@
-// rpg_bot - Telegram bot help you to run Rust code in Telegram via Rust playground
+// rpg_bot - Telegram bot 🤖, help you to run and share Rust code in Telegram via Rust playground 🦀
 // Source code: <https://github.com/TheAwiteb/rpg_bot>
 //
 // Copyright (C) 2022 TheAwiteb <awiteb@hotmail.com>
