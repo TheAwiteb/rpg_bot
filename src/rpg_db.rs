@@ -28,6 +28,15 @@ pub fn establish_connection() -> SqliteConnection {
 }
 
 /// Creating new source
-pub fn create_source(conn: &mut SqliteConnection, source_code: &str, author: Users) -> SourceCode {
-    NewSourceCode::new(source_code.to_string(), author).save(conn)
+pub async fn create_source<T>(
+    conn: &mut SqliteConnection,
+    source_code: T,
+    author: &Users,
+) -> Result<SourceCode, diesel::result::Error>
+where
+    T: Into<String>,
+{
+    Ok(NewSourceCode::new(conn, source_code, author)?
+        .save(conn)
+        .await?)
 }
