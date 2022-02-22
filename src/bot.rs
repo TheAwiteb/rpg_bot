@@ -131,16 +131,19 @@ pub async fn bot_username(bot: &AutoSend<Bot>) -> String {
 }
 
 /// Returns wait message of command (Run and Share) else return `None`
-fn get_wait_message(command: &Command) -> Option<String> {
+fn get_wait_message(command: &Command) -> Result<String, String> {
     if let Some((version, mode, edition)) = command.args() {
         let ditals: String = format!("Version: {version}\nMode: {mode}\nEdition: {edition}");
         if command.name() == "run" {
-            return Some(format!("The code is being executed 🦀⚙️\n{ditals}"));
+            return Ok(format!("The code is being executed 🦀⚙️\n{ditals}"));
         } else {
-            return Some(format!("Creating a playground URL 🦀🔗\n{ditals}"));
+            return Ok(format!("Creating a playground URL 🦀🔗\n{ditals}"));
         }
     } else {
-        None
+        return Err(format!(
+            "'{}' is invalid command for `get_wait_message` function",
+            command.name()
+        ));
     }
 }
 
@@ -158,24 +161,37 @@ async fn replay_wait_message(
     chat_id: i64,
     message_id: i32,
     command: &Command,
-) -> Result<Message, Box<dyn Error + Send + Sync>> {
-    // TODO: Send error to user (don't use unwrap)
-    let message: String = get_wait_message(command).unwrap();
-    Ok(bot
-        .send_message(chat_id, message)
-        .reply_to_message_id(message_id)
-        .send()
-        .await?)
+) -> Result<Message, String> {
+    match get_wait_message(command) {
+        Ok(message) => Ok(bot
+            .send_message(chat_id, message)
+            .reply_to_message_id(message_id)
+            .send()
+            .await
+            .map_err(|err| format!("{}", err))?),
+        Err(err) => {
+            log::error!("{}", err);
+            Err(err)
+        }
+    }
 }
 
 async fn send_wait_message(
     bot: &AutoSend<Bot>,
     chat_id: i64,
     command: &Command,
-) -> Result<Message, Box<dyn Error + Send + Sync>> {
-    // TODO: Send error to user (don't use unwrap)
-    let message: String = get_wait_message(command).unwrap();
-    Ok(bot.send_message(chat_id, message).send().await?)
+) -> Result<Message, String> {
+    match get_wait_message(command) {
+        Ok(message) => Ok(bot
+            .send_message(chat_id, message)
+            .send()
+            .await
+            .map_err(|err| format!("{}", err))?),
+        Err(err) => {
+            log::error!("{}", err);
+            Err(err)
+        }
+    }
 }
 
 #[allow(unused_variables)]
