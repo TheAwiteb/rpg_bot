@@ -33,7 +33,8 @@ table! {
         telegram_id -> Text,
         telegram_fullname -> Text,
         attempts -> Integer,
-        last_record -> Nullable<Timestamp>,
+        last_command_record -> Nullable<Timestamp>,
+        last_button_record -> Nullable<Timestamp>,
     }
 }
 
