@@ -41,7 +41,7 @@ async fn run() {
     let bot = Bot::from_env().auto_send();
 
     log::info!(
-        "Starting Rust Playground Bot in @{}",
+        "Starting Rust Playground Bot in https://t.me/{}",
         bot::bot_username(&bot).await
     );
 
