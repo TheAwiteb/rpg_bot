@@ -21,7 +21,13 @@ table! {
         id -> Integer,
         user_id -> Integer,
         code -> Text,
+        // TODO: make table contain source ditals 📃 🠯
+        // start from here 🠯
         source_code -> Text,
+        version -> Text,
+        edition -> Text,
+        mode -> Text,
+        // end here 🠭 (Note: replace this with id)
         created_at -> Timestamp,
     }
 }

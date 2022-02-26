@@ -16,9 +16,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::schema::users::attempts;
-
-use super::schema::{source_codes, users};
+use super::{
+    rpg::Code,
+    schema::{source_codes, users},
+};
 use chrono::{offset, NaiveDateTime};
 use diesel::{prelude::*, update};
 use rand::distributions::Alphanumeric;
@@ -41,6 +42,9 @@ pub struct SourceCode {
     pub id: i32,
     pub user_id: i32,
     pub source_code: String,
+    pub version: String,
+    pub edition: String,
+    pub mode: String,
     pub code: String,
     pub created_at: NaiveDateTime,
 }
@@ -58,19 +62,20 @@ pub struct NewUser {
 pub struct NewSourceCode {
     pub user_id: i32,
     pub source_code: String,
+    pub version: String,
+    pub edition: String,
+    pub mode: String,
     pub code: String,
     pub created_at: NaiveDateTime,
 }
 
-type DieselError = diesel::result::Error;
-type ResultDiesel<T> = Result<T, DieselError>;
+pub type DieselError = diesel::result::Error;
+pub type DieselResult<T> = Result<T, DieselError>;
 
 impl TryFrom<(&NewSourceCode, &mut SqliteConnection)> for SourceCode {
     type Error = DieselError;
 
-    fn try_from(
-        (source, conn): (&NewSourceCode, &mut SqliteConnection),
-    ) -> ResultDiesel<Self> {
+    fn try_from((source, conn): (&NewSourceCode, &mut SqliteConnection)) -> DieselResult<Self> {
         use super::schema::source_codes::dsl::{code, source_codes};
         source_codes
             .filter(code.eq(source.code.clone()))
@@ -81,7 +86,7 @@ impl TryFrom<(&NewSourceCode, &mut SqliteConnection)> for SourceCode {
 impl TryFrom<(&NewUser, &mut SqliteConnection)> for Users {
     type Error = DieselError;
 
-    fn try_from((user, conn): (&NewUser, &mut SqliteConnection)) -> ResultDiesel<Self> {
+    fn try_from((user, conn): (&NewUser, &mut SqliteConnection)) -> DieselResult<Self> {
         use super::schema::users::dsl::{telegram_id, users};
         users
             .filter(telegram_id.eq(&user.telegram_id))
@@ -89,22 +94,22 @@ impl TryFrom<(&NewUser, &mut SqliteConnection)> for Users {
     }
 }
 
-impl From<TelegramUser> for NewUser {
+impl From<&TelegramUser> for NewUser {
     /// Returns new user object from telegram user
-    fn from(user: TelegramUser) -> Self {
+    fn from(user: &TelegramUser) -> Self {
         let fullname = format!(
             "{} {}",
             user.first_name,
-            user.last_name.unwrap_or(String::new())
+            user.last_name.clone().unwrap_or(String::new())
         );
-        Self::new(user.username, format!("{}", user.id), fullname)
+        Self::new(user.username.clone(), user.id.to_string(), fullname)
     }
 }
 
 impl SourceCode {
     /// Returns new code that not in database
     /// The code is a distinctive code that distinguishes the source code from others, (it is used to request it instead of using id)
-    pub fn code(conn: &mut SqliteConnection) -> ResultDiesel<String> {
+    pub fn code(conn: &mut SqliteConnection) -> DieselResult<String> {
         use super::schema::source_codes::dsl::{code as code_, source_codes};
         loop {
             // create random code
@@ -128,7 +133,7 @@ impl SourceCode {
     }
 
     /// Use this function to remove all source codes that have expired
-    pub fn filter_source_codes(conn: &mut SqliteConnection) -> ResultDiesel<()> {
+    pub fn filter_source_codes(conn: &mut SqliteConnection) -> DieselResult<()> {
         use super::schema::source_codes::dsl::{created_at, source_codes};
 
         // TODO: Use db to get time_limit_expiration
@@ -144,13 +149,13 @@ impl SourceCode {
     }
 
     /// Returns source code by code
-    pub fn get_by_code(code: &str, conn: &mut SqliteConnection) -> ResultDiesel<Self> {
+    pub fn get_by_code(code: &str, conn: &mut SqliteConnection) -> DieselResult<Self> {
         use super::schema::source_codes::dsl::{code as code_, source_codes};
         source_codes.filter(code_.eq(code)).first::<Self>(conn)
     }
 
     /// Returns source author
-    pub fn author(&self, conn: &mut SqliteConnection) -> ResultDiesel<Users> {
+    pub fn author(&self, conn: &mut SqliteConnection) -> DieselResult<Users> {
         use super::schema::users::dsl::{id, users};
         users.filter(id.eq(&self.user_id)).first::<Users>(conn)
     }
@@ -159,7 +164,7 @@ impl SourceCode {
 impl Users {
     /// Add attempt to user attempts
     pub async fn make_attempt(&mut self, conn: &mut SqliteConnection) {
-        use super::schema::users::dsl::{telegram_id, users};
+        use super::schema::users::dsl::{attempts, telegram_id, users};
         update(users.filter(telegram_id.eq(&self.telegram_id)))
             .set(attempts.eq(self.attempts + 1))
             .execute(conn)
@@ -211,18 +216,16 @@ impl Users {
     }
 
     /// create new source code for user
-    pub async fn new_source_code<T>(
+    pub async fn new_source_code(
         &self,
         conn: &mut SqliteConnection,
-        source_code: T,
-    ) -> ResultDiesel<SourceCode>
-    where
-        T: Into<String>,
-    {
+        source_code: &Code,
+    ) -> DieselResult<SourceCode> {
         NewSourceCode::new(conn, source_code, self)?
             .save(conn)
             .await
     }
+
     /// Returns source codes of user
     pub fn source_codes(&self, conn: &mut SqliteConnection) -> Option<Vec<SourceCode>> {
         use super::schema::source_codes::dsl::{source_codes, user_id};
@@ -252,7 +255,7 @@ impl NewUser {
     }
 
     /// save object in database
-    pub async fn save(&self, conn: &mut SqliteConnection) -> ResultDiesel<Users> {
+    pub async fn save(&self, conn: &mut SqliteConnection) -> DieselResult<Users> {
         diesel::insert_into(users::table)
             .values(self)
             .execute(conn)?;
@@ -262,13 +265,16 @@ impl NewUser {
 
 impl NewSourceCode {
     /// Make new object, you can save it in database use save method
-    pub fn new<T: Into<String>>(
+    pub fn new(
         conn: &mut SqliteConnection,
-        source_code: T,
+        source_code: &Code,
         author: &Users,
-    ) -> ResultDiesel<Self> {
+    ) -> DieselResult<Self> {
         Ok(Self {
-            source_code: source_code.into(),
+            source_code: source_code.source_code.to_string(),
+            version: source_code.version.to_string(),
+            edition: source_code.edition.to_string(),
+            mode: source_code.mode.to_string(),
             code: SourceCode::code(conn)?,
             user_id: author.id as i32,
             created_at: NaiveDateTime::from_timestamp(offset::Utc::now().timestamp(), 0),
@@ -276,7 +282,7 @@ impl NewSourceCode {
     }
 
     /// save object in database
-    pub async fn save(&self, conn: &mut SqliteConnection) -> ResultDiesel<SourceCode> {
+    pub async fn save(&self, conn: &mut SqliteConnection) -> DieselResult<SourceCode> {
         diesel::insert_into(source_codes::table)
             .values(self)
             .execute(conn)?;
