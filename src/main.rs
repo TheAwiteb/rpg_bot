@@ -47,14 +47,25 @@ async fn run() {
 
     let handler = dptree::entry()
         // Message branches
-        .branch(
-            Update::filter_message().branch(
-                dptree::filter(|message: Message| message.text().is_some())
-                    .endpoint(bot::message_text_handler),
+        .branch(Update::filter_message().branch(
+            dptree::filter(|message: Message| message.text().is_some()).endpoint(
+                |message: Message, bot: AutoSend<Bot>| async move {
+                    || -> Result<(), ()> {
+                        tokio::spawn(bot::message_text_handler(message, bot));
+                        Ok(())
+                    }()
+                },
             ),
-        )
+        ))
         // Callback query branch
-        .branch(Update::filter_callback_query().endpoint(bot::callback_handler));
+        .branch(Update::filter_callback_query().endpoint(
+            |bot: AutoSend<Bot>, callback_query: CallbackQuery| async move {
+                || -> Result<(), ()> {
+                    tokio::spawn(bot::callback_handler(bot, callback_query));
+                    Ok(())
+                }()
+            },
+        ));
 
     Dispatcher::builder(bot, handler)
         .build()
