@@ -147,7 +147,8 @@ impl SourceCode {
         use super::schema::source_codes::dsl::{created_at, source_codes};
 
         // TODO: Use db to get time_limit_expiration
-        let time_limit_expiration: i64 = 20; // seconds
+        let time_limit_expiration: i64 =
+            ((60 * 60/* One houre */) * 24/* One day */) * 7/* One week */; // in seconds
         diesel::delete(
             source_codes.filter(created_at.le(NaiveDateTime::from_timestamp(
                 offset::Utc::now().timestamp() - time_limit_expiration,
@@ -246,7 +247,7 @@ impl Users {
         ((self.last_command_record.is_none())
             || ((self.last_command_record.unwrap().timestamp() + command_delay)
                 <= offset::Utc::now().timestamp()))
-            && (self.attempts < 100) // TODO: Use db to get attempts
+            && (self.attempts < self.attempts_maximum)
     }
 
     /// Returns `true` if user can click button
@@ -256,7 +257,7 @@ impl Users {
         ((self.last_button_record.is_none())
             || ((self.last_button_record.unwrap().timestamp() + button_delay)
                 <= offset::Utc::now().timestamp()))
-            && (self.attempts < 100) // TODO: Use db to get attempts
+            && (self.attempts < self.attempts_maximum)
     }
 
     /// create new source code for user

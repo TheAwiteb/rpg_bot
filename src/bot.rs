@@ -213,10 +213,10 @@ fn delay_error_message(author: &Users, is_command: bool) -> String {
     )
 }
 
-fn attempt_error_message() -> String {
+fn attempt_error_message(user: &Users) -> String {
     format!(
-        "Sorry, you have exceeded {} bot attempts ❗",
-        100 // TODO: get it from db
+        "Sorry, you have exceeded your {} attempts ❗",
+        user.attempts_maximum
     )
 }
 
@@ -589,8 +589,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                 } else if command == "start" {
                     bot.send_message(message.chat.id, format!(
                         "{}\nNote:\nYou have {} attempts to use bot \\(share and run\\)\n{} seconds between every command\n{} seconds between every button click",
-                    // TODO: get delay and attempts from db
-                    messages::START_MESSAGE, 100, 15, 2
+                    messages::START_MESSAGE, author.attempts_maximum, 15, 2
                 )
                     )
                         .reply_to_message_id(message.id)
@@ -604,11 +603,10 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                 };
             } else {
                 // Cannot send command
-                // TODO: Use db to get attempts
                 bot.send_message(
                     message.chat.id,
-                    if author.attempts == 100 {
-                        attempt_error_message()
+                    if author.attempts >= author.attempts_maximum {
+                        attempt_error_message(&author)
                     } else {
                         delay_error_message(&author, true)
                     },
@@ -713,8 +711,8 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
             };
         } else {
             bot.answer_callback_query(callback_query.id)
-                .text(if author.attempts == 100 {
-                    attempt_error_message()
+                .text(if author.attempts >= author.attempts_maximum {
+                    attempt_error_message(&author)
                 } else {
                     delay_error_message(&author, false)
                 })
