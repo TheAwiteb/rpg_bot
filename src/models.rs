@@ -33,6 +33,7 @@ pub struct Users {
     pub telegram_id: String,
     pub telegram_fullname: String,
     pub attempts: i32,
+    pub attempts_maximum: i32,
     pub last_command_record: Option<NaiveDateTime>,
     pub last_button_record: Option<NaiveDateTime>,
 }
