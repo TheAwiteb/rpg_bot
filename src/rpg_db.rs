@@ -16,9 +16,14 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::models::{NewSourceCode, SourceCode, Users};
+use crate::{
+    models::{DieselResult, NewUser, SourceCode, Users},
+    rpg::Code,
+};
 use diesel::prelude::*;
+use futures::executor::block_on;
 use std::env;
+use teloxide::types::User as TelegramUser;
 
 /// Returns db connection
 pub fn establish_connection() -> SqliteConnection {
@@ -27,16 +32,20 @@ pub fn establish_connection() -> SqliteConnection {
         .expect(&format!("Error connecting to {}", database_url))
 }
 
-/// Creating new source
-pub async fn create_source<T>(
+/// Returns old/new user from telegram user object
+pub async fn get_user(conn: &mut SqliteConnection, author: &TelegramUser) -> DieselResult<Users> {
+    Ok(
+        Users::try_from((&NewUser::from(author), conn)).unwrap_or_else(|_| {
+            block_on(NewUser::from(author).save(&mut establish_connection())).unwrap()
+        }),
+    )
+}
+
+/// Add new source code to user, return `SourceCode` if user can add else return string contain the error
+pub async fn create_source(
     conn: &mut SqliteConnection,
-    source_code: T,
+    source_code: &Code,
     author: &Users,
-) -> Result<SourceCode, diesel::result::Error>
-where
-    T: Into<String>,
-{
-    Ok(NewSourceCode::new(conn, source_code, author)?
-        .save(conn)
-        .await?)
+) -> DieselResult<SourceCode> {
+    author.new_source_code(conn, source_code).await
 }
