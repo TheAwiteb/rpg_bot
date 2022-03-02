@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+use crate::models::SourceCode;
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error};
@@ -59,6 +60,17 @@ pub struct Code {
     pub edition: String,
 }
 
+impl From<SourceCode> for Code {
+    fn from(source: SourceCode) -> Self {
+        Self {
+            source_code: source.source_code,
+            version: source.version,
+            edition: source.edition,
+            mode: source.mode,
+        }
+    }
+}
+
 impl Default for RunReq {
     fn default() -> Self {
         Self {
@@ -89,7 +101,7 @@ impl RunRes {
     fn is_valid(&self) -> bool {
         !self
             .stderr
-            .contains("error: could not compile `playground` due to previous error")
+            .contains("error: could not compile `playground`")
     }
 }
 
@@ -180,10 +192,13 @@ pub async fn share(code: &Code) -> Result<String, String> {
 
         Ok(url)
     } else {
-        Err(res_run.stderr.replace(
-            "could not compile `playground` due to previous error",
-            "Source code cannot be shared due to previous errors",
-        ))
+        Err(res_run
+            .stderr
+            .replace(
+                "could not compile `playground`",
+                "Source code cannot be shared",
+            )
+            .replace("/playground", "playground"))
     }
 }
 
@@ -194,7 +209,11 @@ pub async fn run(code: &Code) -> Result<String, String> {
         // Returns error as string for send it to user
         .map_err(|err| format!("{}", err))?;
 
-    let output: String = format!("{}\n{}", res.stderr, res.stdout);
+    let output: String = format!(
+        "{}\n{}",
+        res.stderr.replace("/playground", "playground"),
+        res.stdout
+    );
 
     if res.is_valid() {
         Ok(output)
