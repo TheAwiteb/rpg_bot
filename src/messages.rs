@@ -30,3 +30,4 @@ pub const MESSAGE_CANNOT_REACHED: &str = "The message with the source code canno
 pub const ALREADY_USE_KEYBOARD: &str = "The source code is already has run/share it";
 pub const CANNOT_RUN_INVALID_CODE: &str = "Cannot_Run_invalid_source_code_🤨";
 pub const CANNOT_SHARE_INVALID_CODE: &str = "Cannot_share_invalid_source_code_🤨";
+pub const MUST_BE_TEXT: &str = "The source code must be text ❗";
