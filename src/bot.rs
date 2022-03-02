@@ -1,8 +1,40 @@
-use crate::{messages, rpg};
+// rpg_bot - Telegram bot 🤖, help you to run and share Rust code in Telegram via Rust playground 🦀
+// Source code: <https://github.com/TheAwiteb/rpg_bot>
+//
+// Copyright (C) 2022 TheAwiteb <awiteb@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+use crate::models::Users;
+use crate::{
+    keyboards, messages,
+    models::{Config, SourceCode},
+    rpg, rpg_db,
+};
+use chrono::offset;
+use diesel::SqliteConnection;
+use futures::try_join;
 use std::error::Error;
 use teloxide::payloads::SendMessageSetters;
 use teloxide::utils::command::parse_command;
-use teloxide::{prelude::*, requests::Requester, types::ParseMode, utils::command::BotCommand};
+use teloxide::{
+    prelude2::*,
+    requests::Requester,
+    types::{InlineKeyboardMarkup, ParseMode, User},
+    utils::command::BotCommand,
+    RequestError,
+};
 
 #[derive(BotCommand)]
 #[command(rename = "lowercase", description = "These commands are supported:")]
@@ -40,6 +72,61 @@ pub enum Command {
     },
 }
 
+impl Command {
+    fn args(&self) -> Option<(&str, &str, &str)> {
+        match self {
+            Command::Run {
+                version,
+                mode,
+                edition,
+            } => Some((version, mode, edition)),
+            Command::Share {
+                version,
+                mode,
+                edition,
+            } => Some((version, mode, edition)),
+            _ => None,
+        }
+    }
+
+    fn name(&self) -> &str {
+        match self {
+            #[allow(unused_variables)]
+            Command::Share {
+                version,
+                mode,
+                edition,
+            } => "share",
+
+            #[allow(unused_variables)]
+            Command::Run {
+                version,
+                mode,
+                edition,
+            } => "run",
+            Command::Help => "help",
+        }
+    }
+}
+
+impl From<(&rpg::Code, &str)> for Command {
+    fn from((code, command_name): (&rpg::Code, &str)) -> Command {
+        if command_name.to_ascii_lowercase() == String::from("run") {
+            Command::Run {
+                version: code.version.clone(),
+                mode: code.mode.clone(),
+                edition: code.edition.clone(),
+            }
+        } else {
+            Command::Share {
+                version: code.version.clone(),
+                mode: code.mode.clone(),
+                edition: code.edition.clone(),
+            }
+        }
+    }
+}
+
 /// Returns bot username
 pub async fn bot_username(bot: &AutoSend<Bot>) -> String {
     bot.get_me()
@@ -50,127 +137,245 @@ pub async fn bot_username(bot: &AutoSend<Bot>) -> String {
         .expect("Bots must have usernames")
 }
 
-/// Send wait message for command
-async fn send_wait_message(
-    cx: &UpdateWithCx<AutoSend<Bot>, Message>,
+/// Returns wait message of command (Run and Share) else return `None`
+fn get_wait_message(command: &Command) -> Result<String, String> {
+    if let Some((version, mode, edition)) = command.args() {
+        let ditals: String = format!("Version: {version}\nMode: {mode}\nEdition: {edition}");
+        if command.name() == "run" {
+            return Ok(format!("The code is being executed 🦀⚙️\n{ditals}"));
+        } else {
+            return Ok(format!("Creating a playground URL 🦀🔗\n{ditals}"));
+        }
+    } else {
+        return Err(format!(
+            "'{}' is invalid command for `get_wait_message` function",
+            command.name()
+        ));
+    }
+}
+
+async fn already_use_answer(requester: &AutoSend<Bot>, query_id: &str) {
+    requester
+        .answer_callback_query(query_id)
+        .text(messages::ALREADY_USE_KEYBOARD)
+        .send()
+        .await
+        .unwrap();
+}
+
+async fn replay_wait_message(
+    bot: &AutoSend<Bot>,
+    chat_id: i64,
+    message_id: i32,
     command: &Command,
-) -> Result<Message, Box<dyn Error + Send + Sync>> {
-    let message = match &command {
-        Command::Run {
-            version,
-            mode,
-            edition,
-        } => {
-            format!(
-                r#"The code is being executed 🦀⚙️
-        Version: {version}
-        Mode: {mode}
-        Edition: {edition}"#
-            )
+) -> Result<Message, String> {
+    match get_wait_message(command) {
+        Ok(message) => Ok(bot
+            .send_message(chat_id, message)
+            .reply_to_message_id(message_id)
+            .send()
+            .await
+            .map_err(|err| format!("{}", err))?),
+        Err(err) => {
+            log::error!("{}", err);
+            Err(err)
         }
-        Command::Share {
-            version,
-            mode,
-            edition,
-        } => {
-            format!(
-                r#"Creating a playground URL 🦀🔗
-        Version: {version}
-        Mode: {mode}
-        Edition: {edition}"#
-            )
+    }
+}
+
+async fn send_wait_message(
+    bot: &AutoSend<Bot>,
+    chat_id: i64,
+    command: &Command,
+) -> Result<Message, String> {
+    match get_wait_message(command) {
+        Ok(message) => Ok(bot
+            .send_message(chat_id, message)
+            .send()
+            .await
+            .map_err(|err| format!("{}", err))?),
+        Err(err) => {
+            log::error!("{}", err);
+            Err(err)
         }
-        _ => "".into(),
+    }
+}
+
+fn delay_error_message(author: &Users, is_command: bool) -> String {
+    format!(
+        "Sorry, you have to wait {}s (in anticipation of spam)",
+        (if is_command {
+            author.last_command_record
+        } else {
+            author.last_button_record
+        }
+        .unwrap() // The use of unwrap here is normal, because if no record is made to the user, the
+        // `can_send_command` and `can_click_button` functions will return `true`.
+        .timestamp()
+            + if is_command {
+                // default value is 15
+                Config::get_or_add("command_delay", "15", &mut rpg_db::establish_connection())
+                    .value
+                    .parse::<i64>()
+                    .expect("`command_delay` config should be integer")
+            } else {
+                // default value is 2
+                Config::get_or_add("button_delay", "2", &mut rpg_db::establish_connection())
+                    .value
+                    .parse::<i64>()
+                    .expect("`button_delay` config should be integer")
+            })
+            - (offset::Utc::now().timestamp())
+    )
+}
+
+fn attempt_error_message(user: &Users) -> String {
+    format!(
+        "Sorry, you have exceeded your {} attempts ❗",
+        user.attempts_maximum
+    )
+}
+
+/// Share and run, and make attempt for user
+async fn share_run_answer(
+    bot: &AutoSend<Bot>,
+    command: &Command,
+    already_use_keyboard: bool,
+    message: &Message,
+    author: &mut Users,
+    code: rpg::Code,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let output: Result<String, String> = if command.name() == "run" {
+        rpg::run(&code).await
+    } else {
+        rpg::share(&code).await
     };
 
-    Ok(cx.reply_to(&message).send().await?)
+    let code: Option<String> = if output.is_ok() {
+        Some(
+            rpg_db::create_source(&mut rpg_db::establish_connection(), &code, author)
+                .await
+                .unwrap()
+                .code,
+        )
+    } else {
+        None
+    };
+    let (keyboard, output): (InlineKeyboardMarkup, String) = if command.name() == "run" {
+        (
+            keyboards::view_share_keyboard(code, already_use_keyboard, output.is_ok()),
+            match output {
+                Ok(output) => output,
+                Err(output) => output,
+            },
+        )
+    } else {
+        (
+            keyboards::view_run_keyboard(code, already_use_keyboard, output.is_ok()),
+            match output {
+                Ok(output) => output,
+                Err(output) => output,
+            },
+        )
+    };
+    author
+        .make_attempt(&mut rpg_db::establish_connection())
+        .await
+        .unwrap();
+    bot.edit_message_text(
+        // For text messages, the actual UTF-8 text of the message, 0-4096 characters
+        // https://core.telegram.org/bots/api#message
+        message.chat.id,
+        message.id,
+        output
+            .chars()
+            .take(if output.chars().count() > 4096 {
+                4096
+            } else {
+                output.chars().count()
+            })
+            .collect::<String>(),
+    )
+    .reply_markup(keyboard)
+    .send()
+    .await?;
+
+    Ok(())
 }
 
 /// Send code output for run command and Rust playground for share command
-#[allow(unused_variables)]
-pub async fn share_run_answer(
-    cx: UpdateWithCx<AutoSend<Bot>, Message>,
+pub async fn share_run_answer_message(
+    bot: &AutoSend<Bot>,
+    message: &Message,
     command: &Command,
-    version: String,
-    mode: String,
-    edition: String,
+    version: &str,
+    mode: &str,
+    edition: &str,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let code: rpg::Code = rpg::Code {
-        source_code: cx
-            .update
-            .reply_to_message()
-            .unwrap()
-            .text()
-            .unwrap()
-            .to_owned(),
-        version,
-        mode,
-        edition,
-    };
-
-    if let Err(err) = code.is_valid() {
-        cx.reply_to(err).send().await?;
-    } else {
-        let message: Message = send_wait_message(&cx, &command).await?;
-        let output: String = if matches!(
-            command,
-            Command::Run {
-                version,
-                mode,
-                edition
-            }
-        ) {
-            rpg::run(code).await?
+    SourceCode::filter_source_codes(&mut rpg_db::establish_connection()).unwrap();
+    let source_code_message: &Message = message.reply_to_message().unwrap();
+    if let Some(source_code) = source_code_message.text() {
+        let code: rpg::Code = rpg::Code::new(source_code, version, mode, edition);
+        if let Err(err) = code.is_valid() {
+            bot.send_message(message.chat.id, err)
+                .reply_to_message_id(message.id)
+                .send()
+                .await
+                .log_on_error()
+                .await;
         } else {
-            rpg::share(code).await?
-        };
-
-        cx.requester
-            .edit_message_text(
-                // For text messages, the actual UTF-8 text of the message, 0-4096 characters
-                // https://core.telegram.org/bots/api#message
-                message.chat_id(),
-                message.id,
-                &output[..if output.chars().count() > 4096 {
-                    4096
-                } else {
-                    output.chars().count()
-                }],
+            let reply_message: Message =
+                replay_wait_message(bot, message.chat.id, message.id, command).await?;
+            share_run_answer(
+                bot,
+                command,
+                false,
+                &reply_message,
+                &mut rpg_db::get_user(
+                    &mut rpg_db::establish_connection(),
+                    &message.from().unwrap(),
+                )
+                .await
+                .unwrap(),
+                code,
             )
+            .await
+            .log_on_error()
+            .await;
+        }
+    } else {
+        bot.send_message(message.chat.id, messages::MUST_BE_TEXT)
+            .reply_to_message_id(message.id)
             .send()
-            .await?;
+            .await
+            .log_on_error()
+            .await;
     }
     Ok(())
 }
 
-/// Run and Share command handler
-pub async fn command_handler(
-    cx: UpdateWithCx<AutoSend<Bot>, Message>,
-    command: Command,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    match &command {
-        #[allow(unused_variables)]
-        Command::Run {
-            version,
-            mode,
-            edition,
-        }
-        | Command::Share {
-            version,
-            mode,
-            edition,
-        } => {
-            // Share and Run command need reply message
-            if cx.update.reply_to_message().is_some() {
-                share_run_answer(cx, &command, version.clone(), mode.clone(), edition.clone())
-                    .await?;
-            } else {
-                cx.reply_to(messages::REPLY_MESSAGE).send().await?;
-            };
-        }
-        _ => (),
-    };
-
+pub async fn share_run_answer_cllback(
+    bot: &AutoSend<Bot>,
+    chat_id: i64,
+    command: &str,
+    code: rpg::Code,
+    author: &User,
+) -> Result<(), RequestError> {
+    let message: Message = send_wait_message(bot, chat_id, &Command::from((&code, command)))
+        .await
+        .unwrap();
+    share_run_answer(
+        bot,
+        &Command::from((&code, command)),
+        true,
+        &message,
+        &mut rpg_db::get_user(&mut rpg_db::establish_connection(), author)
+            .await
+            .unwrap(),
+        code,
+    )
+    .await
+    .unwrap();
     Ok(())
 }
 
@@ -198,58 +403,357 @@ fn get_args(args: Vec<&str>) -> Vec<String> {
     }
 }
 
-pub async fn main_handler(
-    cx: UpdateWithCx<AutoSend<Bot>, Message>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    match cx.update.text() {
-        Some(text) => {
-            if let Some((command, args)) = parse_command(text, bot_username(&cx.requester).await) {
-                // Is command
-                let command = command.to_ascii_lowercase();
-                if ["run".into(), "share".into()].contains(&command) {
-                    let args: Vec<String> = get_args(args);
-                    if command == "run" {
-                        command_handler(
-                            cx,
-                            Command::Run {
-                                version: args[0].clone(),
-                                mode: args[1].clone(),
-                                edition: args[2].clone(),
-                            },
-                        )
-                        .await?;
-                    } else {
-                        command_handler(
-                            cx,
-                            Command::Share {
-                                version: args[0].clone(),
-                                mode: args[1].clone(),
-                                edition: args[2].clone(),
-                            },
-                        )
-                        .await?;
-                    };
-                } else if command == "help" {
-                    if args.len() > 0 && args[0] == "run" {
-                        cx.reply_to(messages::RUN_HELP).send().await?;
-                    } else if args.len() > 0 && args[0] == "share" {
-                        cx.reply_to(messages::SHARE_HELP).send().await?;
-                    } else {
-                        cx.reply_to(Command::descriptions()).send().await?;
-                    }
-                } else if command == "start" {
-                    cx.reply_to(messages::START_MESSAGE)
-                        .parse_mode(ParseMode::MarkdownV2)
-                        .disable_web_page_preview(true)
-                        .send()
-                        .await?;
-                };
+/// returns None that mean the message is deleted else message content
+fn get_source_code(code: &str) -> Option<SourceCode> {
+    SourceCode::get_by_code(code, &mut rpg_db::establish_connection()).ok()
+}
+
+async fn cannot_reached_answer(bot: &AutoSend<Bot>, query_id: &str) {
+    bot.answer_callback_query(query_id)
+        .text(messages::MESSAGE_CANNOT_REACHED)
+        .send()
+        .await
+        .log_on_error()
+        .await;
+}
+
+async fn run_share_callback(
+    bot: &AutoSend<Bot>,
+    callback_query: &CallbackQuery,
+    command: &str,
+    code: String,
+) {
+    // share and run commands need source code
+    // if get_source_code returns None that mean the source code message is deleted
+    if let Some(source_code) = get_source_code(&code) {
+        let message: Message = callback_query.clone().message.unwrap();
+        let keyboard: InlineKeyboardMarkup = if command == "share" {
+            keyboards::view_share_keyboard(Some(code), true, true)
+        } else {
+            keyboards::view_run_keyboard(Some(code), true, true)
+        };
+        try_join!(
+            share_run_answer_cllback(
+                bot,
+                message.chat.id,
+                command,
+                source_code.into(),
+                &callback_query.from
+            ),
+            bot.edit_message_reply_markup(message.chat.id, message.id)
+                .reply_markup(keyboard)
+                .send()
+        )
+        .log_on_error()
+        .await;
+    } else {
+        cannot_reached_answer(&bot, &callback_query.id).await;
+    }
+}
+
+async fn update_options(
+    bot: &AutoSend<Bot>,
+    callback_query: &CallbackQuery,
+    code: &str,
+    option_name: &str,
+    option_value: &str,
+) {
+    if let Ok(mut source) = SourceCode::get_by_code(code, &mut rpg_db::establish_connection()) {
+        let message: Message = callback_query.clone().message.unwrap();
+        let old_keybord: &InlineKeyboardMarkup = message.reply_markup().unwrap();
+        let answer = bot
+            .answer_callback_query(&callback_query.id)
+            .text(format!("set {} to {}", option_name, option_value))
+            .send();
+
+        source
+            .update_by_name(
+                option_name,
+                option_value,
+                &mut rpg_db::establish_connection(),
+            )
+            .log_on_error()
+            .await;
+
+        let keyboard: InlineKeyboardMarkup =
+            if old_keybord.inline_keyboard[4][0].text.contains("Run") {
+                keyboards::run_keyboard(source)
             } else {
-                // Not command (Text)
+                keyboards::share_keyboard(source)
             };
+
+        if &keyboard != old_keybord {
+            try_join!(
+                answer,
+                bot.edit_message_reply_markup(message.chat.id, message.id)
+                    .reply_markup(keyboard)
+                    .send()
+            )
+            .log_on_error()
+            .await;
+        } else {
+            answer.await.log_on_error().await;
         }
-        None => (),
+    } else {
+        cannot_reached_answer(bot, &callback_query.id).await;
+    }
+}
+
+/// Run and Share command handler
+pub async fn command_handler(
+    bot: &AutoSend<Bot>,
+    message: &Message,
+    command: &Command,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    if let Some((version, mode, edition)) = command.args() {
+        // Share and Run command need reply message
+        if message.reply_to_message().is_some() {
+            share_run_answer_message(bot, message, command, version, mode, edition).await?;
+        } else {
+            // If there is no reply message
+            bot.send_message(message.chat.id, messages::REPLY_MESSAGE)
+                .reply_to_message_id(message.id)
+                .send()
+                .await
+                .log_on_error()
+                .await;
+        };
     };
 
     Ok(())
+}
+
+pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
+    let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
+    if let Some(text) = message.text() {
+        let mut author: Users = rpg_db::get_user(conn, &message.from().unwrap())
+            .await
+            .unwrap();
+
+        if let Some((command, args)) = parse_command(text, bot_username(&bot).await) {
+            // Is command
+            if author.can_send_command(conn) || message.reply_to_message().is_none() {
+                // we have two command need to make record of them, (`run`, `share`), `run` and `share` commands need reply message to work
+                // Can send command
+
+                let command: String = command.to_ascii_lowercase();
+                if ["run".into(), "share".into()].contains(&command) {
+                    if message.reply_to_message().is_some() {
+                        // for run and share command should have reply message to work.
+                        // make record if command are work ( if there reply message )
+                        author.make_command_record(conn).await.log_on_error().await;
+                    };
+                    let mut code_args = get_args(args).into_iter();
+                    if command == "run" {
+                        command_handler(
+                            &bot,
+                            &message,
+                            &Command::Run {
+                                version: code_args.next().unwrap(),
+                                mode: code_args.next().unwrap(),
+                                edition: code_args.next().unwrap(),
+                            },
+                        )
+                        .await
+                        .log_on_error()
+                        .await;
+                    } else {
+                        command_handler(
+                            &bot,
+                            &message,
+                            &Command::Share {
+                                version: code_args.next().unwrap(),
+                                mode: code_args.next().unwrap(),
+                                edition: code_args.next().unwrap(),
+                            },
+                        )
+                        .await
+                        .log_on_error()
+                        .await;
+                    };
+
+                // for this commands no need to make record
+                } else if command == "help" {
+                    if args.len() > 0 && args[0] == "run" {
+                        bot.send_message(message.chat.id, messages::RUN_HELP)
+                            .reply_to_message_id(message.id)
+                            .send()
+                            .await
+                            .log_on_error()
+                            .await;
+                    } else if args.len() > 0 && args[0] == "share" {
+                        bot.send_message(message.chat.id, messages::SHARE_HELP)
+                            .reply_to_message_id(message.id)
+                            .send()
+                            .await
+                            .log_on_error()
+                            .await;
+                    } else {
+                        bot.send_message(message.chat.id, Command::descriptions())
+                            .reply_to_message_id(message.id)
+                            .send()
+                            .await
+                            .log_on_error()
+                            .await;
+                    }
+                } else if command == "start" {
+                    bot.send_message(message.chat.id, format!(
+                        "{}\nNote:\nYou have {} attempts to use bot \\(share and run\\)\n{} seconds between every command\n{} seconds between every button click",
+                    messages::START_MESSAGE, author.attempts_maximum, 15, 2
+                )
+                    )
+                        .reply_to_message_id(message.id)
+                        .parse_mode(ParseMode::MarkdownV2)
+                        .disable_web_page_preview(true)
+                        .reply_markup(keyboards::repo_keyboard())
+                        .send()
+                        .await
+                        .log_on_error()
+                        .await;
+                };
+            } else {
+                // Cannot send command
+                bot.send_message(
+                    message.chat.id,
+                    if author.attempts >= author.attempts_maximum {
+                        attempt_error_message(&author)
+                    } else {
+                        delay_error_message(&author, true)
+                    },
+                )
+                .reply_to_message_id(message.id)
+                .send()
+                .await
+                .log_on_error()
+                .await;
+            };
+        } else {
+            // Not command (Text)
+        };
+    }
+}
+
+pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery) {
+    // callback data be like this in all callback
+    //
+    // <command> <args> <args> ..
+    // viewR <code> <already_use_keyboard>
+    // viewS <code> <already_use_keyboard>
+    // already_use
+    // print <message_with_underscore>
+    // run <code>
+    // share <code>
+    // option <code> <option_name> <option_value>
+
+    if let Some(callback_data) = callback_query.data.clone() {
+        let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
+        let mut author: Users = rpg_db::get_user(conn, &callback_query.from).await.unwrap();
+
+        if author.can_click_button(conn) {
+            // Can click button
+            author.make_button_record(conn).await.log_on_error().await;
+
+            let mut args = callback_data
+                .split_whitespace()
+                .collect::<Vec<&str>>()
+                .into_iter();
+            let command: &str = args.next().expect("callback_data don't have command");
+
+            match command {
+                "viewR" | "viewS" => {
+                    view_handler(
+                        &bot,
+                        &callback_query,
+                        command,
+                        args.next().expect("viewR/viewS don't have code"),
+                        args.next()
+                            .expect("viewR/viewS don't have fourth arg")
+                            .parse()
+                            .unwrap(),
+                    )
+                    .await
+                }
+
+                "already_use" | "print" => {
+                    bot.answer_callback_query(&callback_query.id)
+                        .text(if command == "print" {
+                            args.next()
+                                .expect("print command don't have message to print it")
+                                .replace('_', " ")
+                        } else {
+                            messages::ALREADY_USE_KEYBOARD.to_string()
+                        })
+                        .send()
+                        .await
+                        .log_on_error()
+                        .await;
+                }
+
+                "run" | "share" => {
+                    run_share_callback(
+                        &bot,
+                        &callback_query,
+                        command,
+                        args.next()
+                            .expect("share/run command don't have code")
+                            .to_string(),
+                    )
+                    .await;
+                }
+
+                "option" => {
+                    update_options(
+                        &bot,
+                        &callback_query,
+                        args.next().expect("option command don't have code"),
+                        args.next().expect("option command don't have option_name"),
+                        args.next().expect("option command don't have option_value"),
+                    )
+                    .await
+                }
+                _ => (),
+            };
+        } else {
+            bot.answer_callback_query(callback_query.id)
+                .text(if author.attempts >= author.attempts_maximum {
+                    attempt_error_message(&author)
+                } else {
+                    delay_error_message(&author, false)
+                })
+                .send()
+                .await
+                .log_on_error()
+                .await;
+        };
+    }
+}
+
+async fn view_handler(
+    bot: &AutoSend<Bot>,
+    callback_query: &CallbackQuery,
+    view: &str,
+    code: &str,
+    already_use_keyboard: bool,
+) {
+    if already_use_keyboard {
+        already_use_answer(bot, &callback_query.id).await;
+    } else {
+        if let Ok(source) = SourceCode::get_by_code(code, &mut rpg_db::establish_connection()) {
+            // unwrap here because every callback query have message 🙂
+            let message: Message = callback_query.clone().message.unwrap();
+            let keyboard: InlineKeyboardMarkup = if view == "viewR" {
+                keyboards::run_keyboard(source)
+            } else {
+                keyboards::share_keyboard(source)
+            };
+
+            bot.edit_message_reply_markup(message.chat.id, message.id)
+                .reply_markup(keyboard)
+                .send()
+                .await
+                .unwrap();
+        } else {
+            cannot_reached_answer(bot, &callback_query.id).await;
+        }
+    }
 }

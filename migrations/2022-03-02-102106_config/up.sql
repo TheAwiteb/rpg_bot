@@ -1,0 +1,5 @@
+CREATE TABLE config (
+    id INTEGER NOT NULL PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    value VARCHAR NOT NULL
+)
