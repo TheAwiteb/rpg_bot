@@ -1,4 +1,3 @@
-
 <div align="center">
   <img width=300 src="https://rustacean.net/assets/rustacean-flat-happy.png">
   <h1>RPG_BOT (Rust Playground Bot)</h1>
@@ -33,6 +32,9 @@
     </li>
     <li>
       <a href="#Bot-interface">Bot interface</a>
+    </li>
+    <li>
+      <a href="#Features">Features</a>
     </li>
     <li>
       <a href="#Installation">Installation</a>
@@ -89,6 +91,19 @@ The bot supports 3 straightforward commands:
 - `/run <version (default: stable)> <mode (default: debug)> <edition (default: 2021)>` — use this command with reply to code you want to execute it.
 
 - `/share <version (default: stable)> <mode (default: debug)> <edition (default: 2021)>` — use this command with reply to code you want to share it.
+
+## Features
+- Use [ORM](https://en.wikipedia.org/wiki/Object%E2%80%93relational_mapping) database with [Diesel](https://github.com/diesel-rs/diesel).
+- Delay for each user.  <!-- (You can update it from bot) -->
+- Beautiful telegram keyboard.
+- Conditions that protect Rust Playground, including the inability to publish sources that are not in the Rust language, and also the inability to publish a source that was published in the same process (and with run as well).
+- Delete the sources periodically (to prevent accumulation and increase in size).
+<!-- - Do not save a previously saved source (the saved one is used). -->
+<!-- - Admin interface -->
+<!-- - Languages support (You can add new language). -->
+<!-- - Possibility to adjust the limit and the delay time for each user. -->
+<!-- - Possibility to set more than one admin. -->
+<!-- - The ability to modify messages from the bot. -->
 
 ## Installation
 ### Building
