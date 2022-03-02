@@ -17,8 +17,13 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use crate::models::Users;
-use crate::{keyboards, messages, models::SourceCode, rpg, rpg_db};
+use crate::{
+    keyboards, messages,
+    models::{Config, SourceCode},
+    rpg, rpg_db,
+};
 use chrono::offset;
+use diesel::SqliteConnection;
 use futures::try_join;
 use std::error::Error;
 use teloxide::payloads::SendMessageSetters;
@@ -200,15 +205,26 @@ fn delay_error_message(author: &Users, is_command: bool) -> String {
     format!(
         "Sorry, you have to wait {}s (in anticipation of spam)",
         (if is_command {
-                author.last_command_record
+            author.last_command_record
+        } else {
+            author.last_button_record
+        }
+        .unwrap() // The use of unwrap here is normal, because if no record is made to the user, the
+        // `can_send_command` and `can_click_button` functions will return `true`.
+        .timestamp()
+            + if is_command {
+                // default value is 15
+                Config::get_or_add("command_delay", "15", &mut rpg_db::establish_connection())
+                    .value
+                    .parse::<i64>()
+                    .expect("`command_delay` config should be integer")
             } else {
-                author.last_button_record
-            }
-            .unwrap() // The use of unwrap here is normal, because if no record is made to the user, the
-                        // `can_send_command` and `can_click_button` functions will return `true`.
-            .timestamp()
-            // TODO: Use db to get delay
-            + if is_command { 15 } else { 2 })
+                // default value is 2
+                Config::get_or_add("button_delay", "2", &mut rpg_db::establish_connection())
+                    .value
+                    .parse::<i64>()
+                    .expect("`button_delay` config should be integer")
+            })
             - (offset::Utc::now().timestamp())
     )
 }
@@ -508,17 +524,15 @@ pub async fn command_handler(
 }
 
 pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
+    let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
     if let Some(text) = message.text() {
-        let mut author: Users = rpg_db::get_user(
-            &mut rpg_db::establish_connection(),
-            &message.from().unwrap(),
-        )
-        .await
-        .unwrap();
+        let mut author: Users = rpg_db::get_user(conn, &message.from().unwrap())
+            .await
+            .unwrap();
 
         if let Some((command, args)) = parse_command(text, bot_username(&bot).await) {
             // Is command
-            if author.can_send_command() || message.reply_to_message().is_none() {
+            if author.can_send_command(conn) || message.reply_to_message().is_none() {
                 // we have two command need to make record of them, (`run`, `share`), `run` and `share` commands need reply message to work
                 // Can send command
 
@@ -527,11 +541,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     if message.reply_to_message().is_some() {
                         // for run and share command should have reply message to work.
                         // make record if command are work ( if there reply message )
-                        author
-                            .make_command_record(&mut rpg_db::establish_connection())
-                            .await
-                            .log_on_error()
-                            .await;
+                        author.make_command_record(conn).await.log_on_error().await;
                     };
                     let mut code_args = get_args(args).into_iter();
                     if command == "run" {
@@ -636,18 +646,12 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
     // option <code> <option_name> <option_value>
 
     if let Some(callback_data) = callback_query.data.clone() {
-        let mut author: Users =
-            rpg_db::get_user(&mut rpg_db::establish_connection(), &callback_query.from)
-                .await
-                .unwrap();
+        let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
+        let mut author: Users = rpg_db::get_user(conn, &callback_query.from).await.unwrap();
 
-        if author.can_click_button() {
+        if author.can_click_button(conn) {
             // Can click button
-            author
-                .make_button_record(&mut rpg_db::establish_connection())
-                .await
-                .log_on_error()
-                .await;
+            author.make_button_record(conn).await.log_on_error().await;
 
             let mut args = callback_data
                 .split_whitespace()

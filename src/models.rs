@@ -127,6 +127,36 @@ impl From<&TelegramUser> for NewUser {
     }
 }
 
+impl NewConfig {
+    fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            value: value.into(),
+        }
+    }
+}
+
+impl Config {
+    /// Get config by name
+    pub fn get_by_name(name: &str, conn: &mut SqliteConnection) -> Option<Self> {
+        use super::schema::config::dsl::{config, name as name_};
+        config.filter(name_.eq(name)).first::<Self>(conn).ok()
+    }
+
+    /// Returns config with `name` if exist or add new to db with `name` and `value`
+    pub fn get_or_add(name: &str, value: &str, conn: &mut SqliteConnection) -> Self {
+        Config::get_by_name(name, conn).unwrap_or_else(|| Config::add(name, value, conn).unwrap())
+    }
+
+    /// Add new config to db
+    pub fn add(name: &str, value: &str, conn: &mut SqliteConnection) -> DieselResult<Self> {
+        diesel::insert_into(config::table)
+            .values(NewConfig::new(name, value))
+            .execute(conn)?;
+        Ok(Config::get_by_name(name, conn).unwrap())
+    }
+}
+
 impl SourceCode {
     /// Returns `true` if the code are exist in database
     pub fn code_is_exist(conn: &mut SqliteConnection, code: &str) -> bool {
@@ -145,7 +175,13 @@ impl SourceCode {
             // create random code
             let code: String = thread_rng()
                 .sample_iter(&Alphanumeric)
-                .take(4) // TODO: Use db to get it
+                .take(
+                    // default value is 4
+                    Config::get_or_add("code_length", "4", conn)
+                        .value
+                        .parse::<usize>()
+                        .expect("`code_length` config should be integer"),
+                )
                 .map(char::from)
                 .collect::<String>()
                 .to_ascii_lowercase();
@@ -160,9 +196,15 @@ impl SourceCode {
     pub fn filter_source_codes(conn: &mut SqliteConnection) -> DieselResult<()> {
         use super::schema::source_codes::dsl::{created_at, source_codes};
 
-        // TODO: Use db to get time_limit_expiration
-        let time_limit_expiration: i64 =
-            ((60 * 60/* One houre */) * 24/* One day */) * 7/* One week */; // in seconds
+        // default value is one week
+        let time_limit_expiration: i64 = Config::get_or_add(
+            "time_limit_expiration",
+            &(((60 * 60/* One houre */) * 24/* One day */) * 7/* One week */).to_string(),
+            conn,
+        )
+        .value
+        .parse::<i64>()
+        .expect("`time_limit_expiration` config should be integer"); // in seconds
         diesel::delete(
             source_codes.filter(created_at.le(NaiveDateTime::from_timestamp(
                 offset::Utc::now().timestamp() - time_limit_expiration,
@@ -255,9 +297,12 @@ impl Users {
     }
 
     /// Returns `true` if user can send command to bot
-    pub fn can_send_command(&self) -> bool {
-        // TODO: Use db to get command_delay
-        let command_delay: i64 = 15.into(); // is will get it as `i32` from db
+    pub fn can_send_command(&self, conn: &mut SqliteConnection) -> bool {
+        let command_delay: i64 = // default value is 15
+        Config::get_or_add("command_delay", "15", conn)
+            .value
+            .parse::<i64>()
+            .expect("`command_delay` config should be integer");
         ((self.last_command_record.is_none())
             || ((self.last_command_record.unwrap().timestamp() + command_delay)
                 <= offset::Utc::now().timestamp()))
@@ -265,9 +310,12 @@ impl Users {
     }
 
     /// Returns `true` if user can click button
-    pub fn can_click_button(&self) -> bool {
-        // TODO: Use db to get button_delay
-        let button_delay: i64 = 2.into(); // is will get it as `i32` from db
+    pub fn can_click_button(&self, conn: &mut SqliteConnection) -> bool {
+        let button_delay: i64 = // default value is 2
+        Config::get_or_add("button_delay", "2", conn)
+            .value
+            .parse::<i64>()
+            .expect("`button_delay` config should be integer");
         ((self.last_button_record.is_none())
             || ((self.last_button_record.unwrap().timestamp() + button_delay)
                 <= offset::Utc::now().timestamp()))
