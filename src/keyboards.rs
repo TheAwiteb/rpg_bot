@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::messages;
+use crate::{messages, models::SourceCode};
 use reqwest::Url;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
@@ -27,7 +27,7 @@ pub fn repo_keyboard() -> InlineKeyboardMarkup {
     )]])
 }
 
-fn option_keyboard(version: &str, mode: &str, edition: &str) -> InlineKeyboardMarkup {
+fn option_keyboard(version: &str, mode: &str, edition: &str, code: &str) -> InlineKeyboardMarkup {
     // keyboard will be like this
     //
     // Version 📦 | Mode ​🚀​   | Edition ​⚡
@@ -48,19 +48,16 @@ fn option_keyboard(version: &str, mode: &str, edition: &str) -> InlineKeyboardMa
     ];
     for row in buttons.chunks(3) {
         keyboard = keyboard.append_row(row.iter().enumerate().map(|(idx, button)| {
-            let mut args: Vec<&str> = vec![version, mode, edition];
+            let args: Vec<&str> = vec![version, mode, edition];
             let it_same: bool = button.to_lowercase() == args[idx];
-            args[idx] = button;
             InlineKeyboardButton::callback(
                 format!("{} {}", button, if it_same { check } else { uncheck }),
                 if button == &"-" {
                     "print 😑".into()
                 } else {
                     format!(
-                        "option {} {} {} {} {}",
-                        args[0].to_lowercase(),
-                        args[1].to_lowercase(),
-                        args[2].to_lowercase(),
+                        "option {} {} {}",
+                        code,
                         match idx {
                             0 => "version",
                             1 => "mode",
@@ -76,19 +73,15 @@ fn option_keyboard(version: &str, mode: &str, edition: &str) -> InlineKeyboardMa
 }
 
 pub fn view_run_keyboard(
-    version: &str,
-    mode: &str,
-    edition: &str,
+    code: Option<String>,
     already_use_keyboard: bool,
     is_valid_source: bool,
 ) -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new([[InlineKeyboardButton::callback(
         "Run 🦀⚙️".into(),
         if is_valid_source {
-            format!(
-                "viewR {} {} {} {}",
-                version, mode, edition, already_use_keyboard
-            )
+            // if source code is valid, the code will be valid
+            format!("viewR {} {}", code.unwrap(), already_use_keyboard)
         } else {
             format!("print {}", messages::CANNOT_RUN_INVALID_CODE)
         },
@@ -96,35 +89,29 @@ pub fn view_run_keyboard(
 }
 
 pub fn view_share_keyboard(
-    version: &str,
-    mode: &str,
-    edition: &str,
+    code: Option<String>,
     already_use_keyboard: bool,
     is_valid_source: bool,
 ) -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new([[InlineKeyboardButton::callback(
         "Share 🦀🔗".into(),
         if is_valid_source {
-            format!(
-                "viewR {} {} {} {}",
-                version, mode, edition, already_use_keyboard
-            )
+            // if source code is valid, the code will be valid
+            format!("viewS {} {}", code.unwrap(), already_use_keyboard)
         } else {
             format!("print {}", messages::CANNOT_SHARE_INVALID_CODE)
         },
     )]])
 }
 
-pub fn run_keyboard(version: &str, mode: &str, edition: &str) -> InlineKeyboardMarkup {
-    option_keyboard(version, mode, edition).append_row([InlineKeyboardButton::callback(
-        "Run 🦀⚙️".into(),
-        format!("run {} {} {}", version, mode, edition),
-    )])
+pub fn run_keyboard(source: SourceCode) -> InlineKeyboardMarkup {
+    option_keyboard(&source.version, &source.mode, &source.edition, &source.code).append_row([
+        InlineKeyboardButton::callback("Run 🦀⚙️".into(), format!("run {}", source.code)),
+    ])
 }
 
-pub fn share_keyboard(version: &str, mode: &str, edition: &str) -> InlineKeyboardMarkup {
-    option_keyboard(version, mode, edition).append_row([InlineKeyboardButton::callback(
-        "Share 🦀🔗".into(),
-        format!("share {} {} {}", version, mode, edition),
-    )])
+pub fn share_keyboard(source: SourceCode) -> InlineKeyboardMarkup {
+    option_keyboard(&source.version, &source.mode, &source.edition, &source.code).append_row([
+        InlineKeyboardButton::callback("Share 🦀🔗".into(), format!("share {}", source.code)),
+    ])
 }
