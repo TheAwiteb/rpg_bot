@@ -17,17 +17,22 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 table! {
+    config (id) {
+        id -> Integer,
+        name -> Text,
+        value -> Text,
+    }
+}
+
+table! {
     source_codes (id) {
         id -> Integer,
         user_id -> Integer,
         code -> Text,
-        // TODO: make table contain source ditals 📃 🠯
-        // start from here 🠯
         source_code -> Text,
         version -> Text,
         edition -> Text,
         mode -> Text,
-        // end here 🠭 (Note: replace this with id)
         created_at -> Timestamp,
     }
 }
@@ -47,4 +52,8 @@ table! {
 
 joinable!(source_codes -> users (user_id));
 
-allow_tables_to_appear_in_same_query!(source_codes, users,);
+allow_tables_to_appear_in_same_query!(
+    config,
+    source_codes,
+    users,
+);

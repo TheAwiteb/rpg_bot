@@ -18,7 +18,7 @@
 
 use super::{
     rpg::Code,
-    schema::{source_codes, users},
+    schema::{config, source_codes, users},
 };
 use chrono::{offset, NaiveDateTime};
 use diesel::{prelude::*, query_builder::UpdateStatement, update};
@@ -50,6 +50,13 @@ pub struct SourceCode {
     pub created_at: NaiveDateTime,
 }
 
+#[derive(Queryable)]
+pub struct Config {
+    pub id: i32,
+    pub name: String,
+    pub value: String,
+}
+
 #[derive(Debug, Insertable)]
 #[table_name = "users"]
 pub struct NewUser {
@@ -68,6 +75,13 @@ pub struct NewSourceCode {
     pub edition: String,
     pub mode: String,
     pub created_at: NaiveDateTime,
+}
+
+#[derive(Debug, Insertable)]
+#[table_name = "config"]
+pub struct NewConfig {
+    pub name: String,
+    pub value: String,
 }
 
 #[derive(Debug)]
