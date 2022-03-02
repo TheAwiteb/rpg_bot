@@ -21,10 +21,10 @@ use super::{
     schema::{source_codes, users},
 };
 use chrono::{offset, NaiveDateTime};
-use diesel::{prelude::*, update};
+use diesel::{prelude::*, query_builder::UpdateStatement, update};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
-use teloxide::{error_handlers::OnError, types::User as TelegramUser};
+use teloxide::types::User as TelegramUser;
 
 #[derive(Queryable)]
 pub struct Users {
@@ -41,11 +41,11 @@ pub struct Users {
 pub struct SourceCode {
     pub id: i32,
     pub user_id: i32,
+    pub code: String,
     pub source_code: String,
     pub version: String,
     pub edition: String,
     pub mode: String,
-    pub code: String,
     pub created_at: NaiveDateTime,
 }
 
@@ -61,12 +61,18 @@ pub struct NewUser {
 #[table_name = "source_codes"]
 pub struct NewSourceCode {
     pub user_id: i32,
+    pub code: String,
     pub source_code: String,
     pub version: String,
     pub edition: String,
     pub mode: String,
-    pub code: String,
     pub created_at: NaiveDateTime,
+}
+
+#[derive(Debug)]
+pub enum RpgError {
+    Diesel(DieselError),
+    Text(String),
 }
 
 pub type DieselError = diesel::result::Error;
@@ -107,10 +113,19 @@ impl From<&TelegramUser> for NewUser {
 }
 
 impl SourceCode {
+    /// Returns `true` if the code are exist in database
+    pub fn code_is_exist(conn: &mut SqliteConnection, code: &str) -> bool {
+        use super::schema::source_codes::dsl::{code as code_, source_codes};
+        source_codes
+            .filter(code_.eq(&code))
+            .first::<Self>(conn)
+            .ok()
+            .is_some()
+    }
+
     /// Returns new code that not in database
     /// The code is a distinctive code that distinguishes the source code from others, (it is used to request it instead of using id)
     pub fn code(conn: &mut SqliteConnection) -> DieselResult<String> {
-        use super::schema::source_codes::dsl::{code as code_, source_codes};
         loop {
             // create random code
             let code: String = thread_rng()
@@ -120,15 +135,9 @@ impl SourceCode {
                 .collect::<String>()
                 .to_ascii_lowercase();
 
-            match source_codes
-                .filter(code_.eq(&code))
-                .first::<SourceCode>(conn)
-            {
-                // if there no source code with same code return the code
-                Err(err) if matches!(err, DieselError::NotFound) => return Ok(code),
-                // Else, go to the beginning of the loop and create a new code
-                _ => continue,
-            };
+            if !Self::code_is_exist(conn, &code) {
+                return Ok(code);
+            }
         }
     }
 
@@ -159,60 +168,94 @@ impl SourceCode {
         use super::schema::users::dsl::{id, users};
         users.filter(id.eq(&self.user_id)).first::<Users>(conn)
     }
+
+    // Update field by name, just can update `version`, `edition`, `mode`
+    pub fn update_by_name(
+        &mut self,
+        field_name: &str,
+        new_value: &str,
+        conn: &mut SqliteConnection,
+    ) -> Result<(), RpgError> {
+        use super::schema::source_codes::dsl::{edition, mode, source_codes, version};
+
+        if ["version", "edition", "mode"].contains(&field_name) {
+            let update_statement: UpdateStatement<_, _> = update(source_codes.find(self.id));
+            match field_name {
+                "version" => {
+                    self.version = new_value.into();
+                    update_statement.set(version.eq(new_value)).execute(conn)
+                }
+                "edition" => {
+                    self.edition = new_value.into();
+                    update_statement.set(edition.eq(new_value)).execute(conn)
+                }
+                _ => {
+                    self.mode = new_value.into();
+                    update_statement.set(mode.eq(new_value)).execute(conn)
+                }
+            }
+            .map_err(|err| RpgError::Diesel(err))?;
+            Ok(())
+        } else {
+            Err(RpgError::Text(format!(
+                "Cannot update {} field",
+                field_name
+            )))
+        }
+    }
 }
 
 impl Users {
     /// Add attempt to user attempts
-    pub async fn make_attempt(&mut self, conn: &mut SqliteConnection) {
+    pub async fn make_attempt(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
         use super::schema::users::dsl::{attempts, telegram_id, users};
         update(users.filter(telegram_id.eq(&self.telegram_id)))
             .set(attempts.eq(self.attempts + 1))
-            .execute(conn)
-            .log_on_error()
-            .await;
+            .execute(conn)?;
         self.attempts += 1;
+        Ok(())
     }
 
     /// update `last_command_record` (add new record)
-    pub async fn make_command_record(&mut self, conn: &mut SqliteConnection) {
+    pub async fn make_command_record(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
         use super::schema::users::dsl::{last_command_record, telegram_id, users};
         let timestamp = NaiveDateTime::from_timestamp(offset::Utc::now().timestamp(), 0);
         update(users.filter(telegram_id.eq(&self.telegram_id)))
             .set(last_command_record.eq(timestamp))
-            .execute(conn)
-            .log_on_error()
-            .await;
+            .execute(conn)?;
         self.last_command_record = Some(timestamp);
+        Ok(()) // The attempt make it in `share_run_answer`
     }
 
     /// update `last_button_record` (add new record)
-    pub async fn make_button_record(&mut self, conn: &mut SqliteConnection) {
+    pub async fn make_button_record(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
         use super::schema::users::dsl::{last_button_record, telegram_id, users};
         let timestamp = NaiveDateTime::from_timestamp(offset::Utc::now().timestamp(), 0);
         update(users.filter(telegram_id.eq(&self.telegram_id)))
             .set(last_button_record.eq(timestamp))
-            .execute(conn)
-            .log_on_error()
-            .await;
+            .execute(conn)?;
         self.last_button_record = Some(timestamp);
+        Ok(()) // The attempt make it in `share_run_answer`
     }
 
     /// Returns `true` if user can send command to bot
     pub fn can_send_command(&self) -> bool {
         // TODO: Use db to get command_delay
         let command_delay: i64 = 15.into(); // is will get it as `i32` from db
-        self.last_command_record.is_some()
-            && (self.last_command_record.unwrap().timestamp() + command_delay)
-                < offset::Utc::now().timestamp()
+        ((self.last_command_record.is_none())
+            || ((self.last_command_record.unwrap().timestamp() + command_delay)
+                <= offset::Utc::now().timestamp()))
+            && (self.attempts < 100) // TODO: Use db to get attempts
     }
 
     /// Returns `true` if user can click button
     pub fn can_click_button(&self) -> bool {
         // TODO: Use db to get button_delay
-        let button_delay: i64 = 1.into(); // is will get it as `i32` from db
-        self.last_button_record.is_some()
-            && (self.last_button_record.unwrap().timestamp() + button_delay)
-                < offset::Utc::now().timestamp()
+        let button_delay: i64 = 2.into(); // is will get it as `i32` from db
+        ((self.last_button_record.is_none())
+            || ((self.last_button_record.unwrap().timestamp() + button_delay)
+                <= offset::Utc::now().timestamp()))
+            && (self.attempts < 100) // TODO: Use db to get attempts
     }
 
     /// create new source code for user
