@@ -18,15 +18,18 @@
 
 use crate::models::Users;
 use crate::{
-    keyboards, messages,
+    keyboards,
     models::{Config, SourceCode},
-    rpg, rpg_db,
+    rpg,
+    rpg_db::{self, languages_ctx},
 };
 use chrono::offset;
 use diesel::SqliteConnection;
 use futures::try_join;
+use json_gettext::get_text;
+use std::collections::HashMap;
 use std::error::Error;
-use teloxide::payloads::SendMessageSetters;
+use strfmt::strfmt;
 use teloxide::utils::command::parse_command;
 use teloxide::{
     prelude2::*,
@@ -138,29 +141,61 @@ pub async fn bot_username(bot: &AutoSend<Bot>) -> String {
 }
 
 /// Returns wait message of command (Run and Share) else return `None`
-fn get_wait_message(command: &Command) -> Result<String, String> {
+fn get_wait_message(command: &Command, language: &str) -> Option<String> {
     if let Some((version, mode, edition)) = command.args() {
-        let ditals: String = format!("Version: {version}\nMode: {mode}\nEdition: {edition}");
-        if command.name() == "run" {
-            return Ok(format!("The code is being executed 🦀⚙️\n{ditals}"));
-        } else {
-            return Ok(format!("Creating a playground URL 🦀🔗\n{ditals}"));
-        }
+        let mut vars: HashMap<String, String> = HashMap::new();
+        let ctx = languages_ctx();
+        vars.insert("version".into(), version.into());
+        vars.insert("mode".into(), mode.into());
+        vars.insert("edition".into(), edition.into());
+        Some(
+            strfmt(
+                &get_text!(
+                    ctx,
+                    language,
+                    if command.name() == "run" {
+                        "RUN_MESSAGE"
+                    } else {
+                        "SHARE_MESSAGE"
+                    }
+                )
+                .unwrap()
+                .to_string(),
+                &vars,
+            )
+            .unwrap(),
+        )
     } else {
-        return Err(format!(
-            "'{}' is invalid command for `get_wait_message` function",
-            command.name()
-        ));
+        None
     }
 }
 
-async fn already_use_answer(requester: &AutoSend<Bot>, query_id: &str) {
+async fn already_use_answer(
+    requester: &AutoSend<Bot>,
+    query_id: &str,
+    language: &str,
+    is_run: bool,
+) {
+    let ctx = languages_ctx();
     requester
         .answer_callback_query(query_id)
-        .text(messages::ALREADY_USE_KEYBOARD)
+        .text(
+            get_text!(
+                ctx,
+                language,
+                if is_run {
+                    "ALREADY_RUN"
+                } else {
+                    "ALREADY_SHARE"
+                }
+            )
+            .unwrap()
+            .to_string(),
+        )
         .send()
         .await
-        .unwrap();
+        .log_on_error()
+        .await;
 }
 
 async fn replay_wait_message(
@@ -168,43 +203,34 @@ async fn replay_wait_message(
     chat_id: i64,
     message_id: i32,
     command: &Command,
-) -> Result<Message, String> {
-    match get_wait_message(command) {
-        Ok(message) => Ok(bot
-            .send_message(chat_id, message)
-            .reply_to_message_id(message_id)
-            .send()
-            .await
-            .map_err(|err| format!("{}", err))?),
-        Err(err) => {
-            log::error!("{}", err);
-            Err(err)
-        }
-    }
+    language: &str,
+) -> Result<Message, Box<dyn Error + Send + Sync>> {
+    Ok(bot
+        .send_message(chat_id, get_wait_message(command, language).unwrap())
+        .reply_to_message_id(message_id)
+        .send()
+        .await?)
 }
 
 async fn send_wait_message(
     bot: &AutoSend<Bot>,
     chat_id: i64,
     command: &Command,
-) -> Result<Message, String> {
-    match get_wait_message(command) {
-        Ok(message) => Ok(bot
-            .send_message(chat_id, message)
-            .send()
-            .await
-            .map_err(|err| format!("{}", err))?),
-        Err(err) => {
-            log::error!("{}", err);
-            Err(err)
-        }
-    }
+    language: &str,
+) -> Result<Message, Box<dyn Error + Send + Sync>> {
+    Ok(bot
+        .send_message(chat_id, get_wait_message(command, language).unwrap())
+        .send()
+        .await?)
 }
 
 fn delay_error_message(author: &Users, is_command: bool) -> String {
-    format!(
-        "Sorry, you have to wait {}s (in anticipation of spam)",
-        (if is_command {
+    let mut vars: HashMap<String, String> = HashMap::new();
+    let ctx = languages_ctx();
+
+    vars.insert(
+        "delay".to_string(),
+        ((if is_command {
             author.last_command_record
         } else {
             author.last_button_record
@@ -225,15 +251,41 @@ fn delay_error_message(author: &Users, is_command: bool) -> String {
                     .parse::<i64>()
                     .expect("`button_delay` config should be integer")
             })
-            - (offset::Utc::now().timestamp())
+            - (offset::Utc::now().timestamp()))
+        .to_string(),
+    );
+    strfmt(
+        &get_text!(
+            ctx,
+            &author.language,
+            if is_command {
+                "SPAM_COMMAND_MESSAGE"
+            } else {
+                "SPAM_CLICK_MESSAGE"
+            }
+        )
+        .unwrap()
+        .to_string(),
+        &vars,
     )
+    .unwrap()
 }
 
-fn attempt_error_message(user: &Users) -> String {
-    format!(
-        "Sorry, you have exceeded your {} attempts ❗",
-        user.attempts_maximum
+fn attempt_error_message(author: &Users) -> String {
+    let mut vars: HashMap<String, String> = HashMap::new();
+    let ctx = languages_ctx();
+
+    vars.insert(
+        "attempts_maximum".into(),
+        author.attempts_maximum.to_string(),
+    );
+    strfmt(
+        &get_text!(ctx, &author.language, "EXCEEDED_ATTEMPTS_MESSAGE")
+            .unwrap()
+            .to_string(),
+        &vars,
     )
+    .unwrap()
 }
 
 /// Share and run, and make attempt for user
@@ -263,7 +315,12 @@ async fn share_run_answer(
     };
     let (keyboard, output): (InlineKeyboardMarkup, String) = if command.name() == "run" {
         (
-            keyboards::view_share_keyboard(code, already_use_keyboard, output.is_ok()),
+            keyboards::view_share_keyboard(
+                code,
+                already_use_keyboard,
+                output.is_ok(),
+                &author.language,
+            ),
             match output {
                 Ok(output) => output,
                 Err(output) => output,
@@ -271,7 +328,12 @@ async fn share_run_answer(
         )
     } else {
         (
-            keyboards::view_run_keyboard(code, already_use_keyboard, output.is_ok()),
+            keyboards::view_run_keyboard(
+                code,
+                already_use_keyboard,
+                output.is_ok(),
+                &author.language,
+            ),
             match output {
                 Ok(output) => output,
                 Err(output) => output,
@@ -298,7 +360,9 @@ async fn share_run_answer(
     )
     .reply_markup(keyboard)
     .send()
-    .await?;
+    .await
+    .log_on_error()
+    .await;
 
     Ok(())
 }
@@ -311,6 +375,7 @@ pub async fn share_run_answer_message(
     version: &str,
     mode: &str,
     edition: &str,
+    language: &str,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     SourceCode::filter_source_codes(&mut rpg_db::establish_connection()).unwrap();
     let source_code_message: &Message = message.reply_to_message().unwrap();
@@ -325,7 +390,7 @@ pub async fn share_run_answer_message(
                 .await;
         } else {
             let reply_message: Message =
-                replay_wait_message(bot, message.chat.id, message.id, command).await?;
+                replay_wait_message(bot, message.chat.id, message.id, command, language).await?;
             share_run_answer(
                 bot,
                 command,
@@ -344,12 +409,18 @@ pub async fn share_run_answer_message(
             .await;
         }
     } else {
-        bot.send_message(message.chat.id, messages::MUST_BE_TEXT)
-            .reply_to_message_id(message.id)
-            .send()
-            .await
-            .log_on_error()
-            .await;
+        let ctx = languages_ctx();
+        bot.send_message(
+            message.chat.id,
+            get_text!(ctx, language, "MUST_BE_TEXT")
+                .unwrap()
+                .to_string(),
+        )
+        .reply_to_message_id(message.id)
+        .send()
+        .await
+        .log_on_error()
+        .await;
     }
     Ok(())
 }
@@ -360,10 +431,12 @@ pub async fn share_run_answer_cllback(
     command: &str,
     code: rpg::Code,
     author: &User,
+    language: &str,
 ) -> Result<(), RequestError> {
-    let message: Message = send_wait_message(bot, chat_id, &Command::from((&code, command)))
-        .await
-        .unwrap();
+    let message: Message =
+        send_wait_message(bot, chat_id, &Command::from((&code, command)), language)
+            .await
+            .unwrap();
     share_run_answer(
         bot,
         &Command::from((&code, command)),
@@ -375,7 +448,8 @@ pub async fn share_run_answer_cllback(
         code,
     )
     .await
-    .unwrap();
+    .log_on_error()
+    .await;
     Ok(())
 }
 
@@ -408,9 +482,14 @@ fn get_source_code(code: &str) -> Option<SourceCode> {
     SourceCode::get_by_code(code, &mut rpg_db::establish_connection()).ok()
 }
 
-async fn cannot_reached_answer(bot: &AutoSend<Bot>, query_id: &str) {
+async fn cannot_reached_answer(bot: &AutoSend<Bot>, query_id: &str, language: &str) {
+    let ctx = languages_ctx();
     bot.answer_callback_query(query_id)
-        .text(messages::MESSAGE_CANNOT_REACHED)
+        .text(
+            get_text!(ctx, language, "SOURCES_CANNOT_REACHED")
+                .unwrap()
+                .to_string(),
+        )
         .send()
         .await
         .log_on_error()
@@ -422,15 +501,16 @@ async fn run_share_callback(
     callback_query: &CallbackQuery,
     command: &str,
     code: String,
+    language: &str,
 ) {
     // share and run commands need source code
     // if get_source_code returns None that mean the source code message is deleted
     if let Some(source_code) = get_source_code(&code) {
         let message: Message = callback_query.clone().message.unwrap();
         let keyboard: InlineKeyboardMarkup = if command == "share" {
-            keyboards::view_share_keyboard(Some(code), true, true)
+            keyboards::view_share_keyboard(Some(code), true, true, language)
         } else {
-            keyboards::view_run_keyboard(Some(code), true, true)
+            keyboards::view_run_keyboard(Some(code), true, true, language)
         };
         try_join!(
             share_run_answer_cllback(
@@ -438,7 +518,8 @@ async fn run_share_callback(
                 message.chat.id,
                 command,
                 source_code.into(),
-                &callback_query.from
+                &callback_query.from,
+                language
             ),
             bot.edit_message_reply_markup(message.chat.id, message.id)
                 .reply_markup(keyboard)
@@ -447,7 +528,7 @@ async fn run_share_callback(
         .log_on_error()
         .await;
     } else {
-        cannot_reached_answer(&bot, &callback_query.id).await;
+        cannot_reached_answer(&bot, &callback_query.id, language).await;
     }
 }
 
@@ -457,13 +538,31 @@ async fn update_options(
     code: &str,
     option_name: &str,
     option_value: &str,
+    language: &str,
 ) {
     if let Ok(mut source) = SourceCode::get_by_code(code, &mut rpg_db::establish_connection()) {
+        let mut vars: HashMap<String, String> = HashMap::new();
+        let ctx = languages_ctx();
+
+        vars.insert(
+            "option_name".into(),
+            get_text!(ctx, language, option_name.to_ascii_uppercase())
+                .unwrap()
+                .to_string(),
+        );
+        vars.insert("option_value".into(), option_value.to_string());
+
         let message: Message = callback_query.clone().message.unwrap();
         let old_keybord: &InlineKeyboardMarkup = message.reply_markup().unwrap();
         let answer = bot
             .answer_callback_query(&callback_query.id)
-            .text(format!("set {} to {}", option_name, option_value))
+            .text(
+                strfmt(
+                    &get_text!(ctx, language, "SET_MESSAGE").unwrap().to_string(),
+                    &vars,
+                )
+                .unwrap(),
+            )
             .send();
 
         source
@@ -477,9 +576,9 @@ async fn update_options(
 
         let keyboard: InlineKeyboardMarkup =
             if old_keybord.inline_keyboard[4][0].text.contains("Run") {
-                keyboards::run_keyboard(source)
+                keyboards::run_keyboard(source, language)
             } else {
-                keyboards::share_keyboard(source)
+                keyboards::share_keyboard(source, language)
             };
 
         if &keyboard != old_keybord {
@@ -495,8 +594,37 @@ async fn update_options(
             answer.await.log_on_error().await;
         }
     } else {
-        cannot_reached_answer(bot, &callback_query.id).await;
+        cannot_reached_answer(bot, &callback_query.id, language).await;
     }
+}
+
+async fn change_langauge(
+    bot: &AutoSend<Bot>,
+    author: &mut Users,
+    message_id: i32,
+    chat_id: i64,
+    new_language: &str,
+) {
+    let ctx = languages_ctx();
+    let new_language = new_language.replace("_", " ");
+    author
+        .update_language(&new_language, &mut rpg_db::establish_connection())
+        .await
+        .log_on_error()
+        .await;
+    bot.edit_message_text(
+        chat_id,
+        message_id,
+        get_text!(ctx, &new_language, "CHANGE_LANGUAGE_SUCCESSFULLY")
+            .unwrap()
+            .to_string()
+            + " 🤖",
+    )
+    .reply_markup(keyboards::add_lang_keyboard(&new_language))
+    .send()
+    .await
+    .log_on_error()
+    .await;
 }
 
 /// Run and Share command handler
@@ -504,19 +632,27 @@ pub async fn command_handler(
     bot: &AutoSend<Bot>,
     message: &Message,
     command: &Command,
+    language: &str,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     if let Some((version, mode, edition)) = command.args() {
         // Share and Run command need reply message
         if message.reply_to_message().is_some() {
-            share_run_answer_message(bot, message, command, version, mode, edition).await?;
+            share_run_answer_message(bot, message, command, version, mode, edition, language)
+                .await?;
         } else {
+            let ctx = languages_ctx();
             // If there is no reply message
-            bot.send_message(message.chat.id, messages::REPLY_MESSAGE)
-                .reply_to_message_id(message.id)
-                .send()
-                .await
-                .log_on_error()
-                .await;
+            bot.send_message(
+                message.chat.id,
+                get_text!(ctx, language, "REPLY_MESSAGE")
+                    .unwrap()
+                    .to_string(),
+            )
+            .reply_to_message_id(message.id)
+            .send()
+            .await
+            .log_on_error()
+            .await;
         };
     };
 
@@ -530,12 +666,16 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
             .await
             .unwrap();
 
-        if let Some((command, args)) = parse_command(text, bot_username(&bot).await) {
+        if let Some((command, args)) = parse_command(
+            &text.to_ascii_lowercase(),
+            bot_username(&bot).await.to_ascii_lowercase(),
+        ) {
             // Is command
             if author.can_send_command(conn) || message.reply_to_message().is_none() {
                 // we have two command need to make record of them, (`run`, `share`), `run` and `share` commands need reply message to work
                 // Can send command
 
+                let ctx = languages_ctx();
                 let command: String = command.to_ascii_lowercase();
                 if ["run".into(), "share".into()].contains(&command) {
                     if message.reply_to_message().is_some() {
@@ -553,6 +693,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                                 mode: code_args.next().unwrap(),
                                 edition: code_args.next().unwrap(),
                             },
+                            &author.language,
                         )
                         .await
                         .log_on_error()
@@ -566,6 +707,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                                 mode: code_args.next().unwrap(),
                                 edition: code_args.next().unwrap(),
                             },
+                            &author.language,
                         )
                         .await
                         .log_on_error()
@@ -574,42 +716,102 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
 
                 // for this commands no need to make record
                 } else if command == "help" {
-                    if args.len() > 0 && args[0] == "run" {
-                        bot.send_message(message.chat.id, messages::RUN_HELP)
-                            .reply_to_message_id(message.id)
-                            .send()
-                            .await
-                            .log_on_error()
-                            .await;
-                    } else if args.len() > 0 && args[0] == "share" {
-                        bot.send_message(message.chat.id, messages::SHARE_HELP)
-                            .reply_to_message_id(message.id)
-                            .send()
-                            .await
-                            .log_on_error()
-                            .await;
-                    } else {
-                        bot.send_message(message.chat.id, Command::descriptions())
-                            .reply_to_message_id(message.id)
-                            .send()
-                            .await
-                            .log_on_error()
-                            .await;
-                    }
-                } else if command == "start" {
-                    bot.send_message(message.chat.id, format!(
-                        "{}\nNote:\nYou have {} attempts to use bot \\(share and run\\)\n{} seconds between every command\n{} seconds between every button click",
-                    messages::START_MESSAGE, author.attempts_maximum, 15, 2
-                )
+                    let mut vars: HashMap<String, String> = HashMap::new();
+                    vars.insert(
+                        "help_help".to_string(),
+                        get_text!(ctx, &author.language, "HELP_HELP")
+                            .unwrap()
+                            .to_string(),
+                    );
+                    vars.insert(
+                        "help_run".to_string(),
+                        get_text!(ctx, &author.language, "RUN_HELP")
+                            .unwrap()
+                            .to_string(),
+                    );
+                    vars.insert(
+                        "help_share".to_string(),
+                        get_text!(ctx, &author.language, "SHARE_HELP")
+                            .unwrap()
+                            .to_string(),
+                    );
+                    vars.insert(
+                        "help_language".to_string(),
+                        get_text!(ctx, &author.language, "LANGUAGE_HELP")
+                            .unwrap()
+                            .to_string(),
+                    );
+
+                    bot.send_message(
+                        message.chat.id,
+                        if !args.is_empty() && args[0] == "run" {
+                            vars.get("help_run").unwrap().to_string()
+                        } else if !args.is_empty() && args[0] == "share" {
+                            vars.get("help_share").unwrap().to_string()
+                        } else if !args.is_empty() && args[0] == "help" {
+                            vars.get("help_help").unwrap().to_string()
+                        } else if !args.is_empty() && args[0] == "language" {
+                            vars.get("help_language").unwrap().to_string()
+                        } else {
+                            strfmt(
+                                &get_text!(ctx, &author.language, "HELP_MESSAGE")
+                                    .unwrap()
+                                    .to_string(),
+                                &vars,
+                            )
+                            .unwrap()
+                        },
                     )
-                        .reply_to_message_id(message.id)
-                        .parse_mode(ParseMode::MarkdownV2)
-                        .disable_web_page_preview(true)
-                        .reply_markup(keyboards::repo_keyboard())
-                        .send()
-                        .await
-                        .log_on_error()
-                        .await;
+                    .reply_to_message_id(message.id)
+                    .send()
+                    .await
+                    .log_on_error()
+                    .await;
+                } else if command == "start" {
+                    let mut vars: HashMap<String, String> = HashMap::new();
+                    vars.insert("bot_username".to_string(), bot_username(&bot).await);
+                    vars.insert("attempts_maximum".to_string(), author.attempts.to_string());
+                    vars.insert(
+                        "command_delay".to_string(),
+                        Config::get_or_add("command_delay", "15", conn).value,
+                    );
+                    vars.insert(
+                        "button_delay".to_string(),
+                        Config::get_or_add("button_delay", "2", conn).value,
+                    );
+
+                    bot.send_message(
+                        message.chat.id,
+                        strfmt(
+                            &get_text!(ctx, &author.language, "START_MESSAGE")
+                                .unwrap()
+                                .to_string(),
+                            &vars,
+                        )
+                        .unwrap(),
+                    )
+                    .reply_to_message_id(message.id)
+                    .parse_mode(ParseMode::Html)
+                    .disable_web_page_preview(true)
+                    .reply_markup(keyboards::repo_keyboard(&author.language))
+                    .send()
+                    .await
+                    .log_on_error()
+                    .await;
+                } else if command == "language" {
+                    bot.send_message(
+                        message.chat.id,
+                        get_text!(ctx, &author.language, "NEW_LANGUAGE_MESSAGE")
+                            .unwrap()
+                            .to_string()
+                            + " 🤖",
+                    )
+                    .reply_to_message_id(message.id)
+                    .reply_markup(keyboards::languages_keyboard(&author.language))
+                    .send()
+                    .await
+                    .log_on_error()
+                    .await;
                 };
             } else {
                 // Cannot send command
@@ -639,11 +841,11 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
     // <command> <args> <args> ..
     // viewR <code> <already_use_keyboard>
     // viewS <code> <already_use_keyboard>
-    // already_use
     // print <message_with_underscore>
     // run <code>
     // share <code>
     // option <code> <option_name> <option_value>
+    // change_lang <new_language>
 
     if let Some(callback_data) = callback_query.data.clone() {
         let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
@@ -667,22 +869,21 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                         command,
                         args.next().expect("viewR/viewS don't have code"),
                         args.next()
-                            .expect("viewR/viewS don't have fourth arg")
+                            .expect("viewR/viewS don't have already_use_keyboard")
                             .parse()
                             .unwrap(),
+                        &author.language,
                     )
-                    .await
+                    .await;
                 }
 
-                "already_use" | "print" => {
+                "print" => {
                     bot.answer_callback_query(&callback_query.id)
-                        .text(if command == "print" {
+                        .text(
                             args.next()
                                 .expect("print command don't have message to print it")
-                                .replace('_', " ")
-                        } else {
-                            messages::ALREADY_USE_KEYBOARD.to_string()
-                        })
+                                .replace('_', " "),
+                        )
                         .send()
                         .await
                         .log_on_error()
@@ -697,6 +898,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                         args.next()
                             .expect("share/run command don't have code")
                             .to_string(),
+                        &author.language,
                     )
                     .await;
                 }
@@ -708,8 +910,20 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                         args.next().expect("option command don't have code"),
                         args.next().expect("option command don't have option_name"),
                         args.next().expect("option command don't have option_value"),
+                        &author.language,
                     )
-                    .await
+                    .await;
+                }
+                "change_lang" => {
+                    let message: Message = callback_query.message.unwrap();
+                    change_langauge(
+                        &bot,
+                        &mut author,
+                        message.id,
+                        message.chat.id,
+                        args.next().expect("change_lang don't have new_language"),
+                    )
+                    .await;
                 }
                 _ => (),
             };
@@ -734,17 +948,18 @@ async fn view_handler(
     view: &str,
     code: &str,
     already_use_keyboard: bool,
+    language: &str,
 ) {
     if already_use_keyboard {
-        already_use_answer(bot, &callback_query.id).await;
+        already_use_answer(bot, &callback_query.id, language, view == "viewR").await;
     } else {
         if let Ok(source) = SourceCode::get_by_code(code, &mut rpg_db::establish_connection()) {
             // unwrap here because every callback query have message 🙂
             let message: Message = callback_query.clone().message.unwrap();
             let keyboard: InlineKeyboardMarkup = if view == "viewR" {
-                keyboards::run_keyboard(source)
+                keyboards::run_keyboard(source, language)
             } else {
-                keyboards::share_keyboard(source)
+                keyboards::share_keyboard(source, language)
             };
 
             bot.edit_message_reply_markup(message.chat.id, message.id)
@@ -753,7 +968,7 @@ async fn view_handler(
                 .await
                 .unwrap();
         } else {
-            cannot_reached_answer(bot, &callback_query.id).await;
+            cannot_reached_answer(bot, &callback_query.id, language).await;
         }
     }
 }
