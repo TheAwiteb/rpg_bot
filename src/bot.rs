@@ -40,34 +40,16 @@ use teloxide::{
 };
 
 #[derive(BotCommand)]
-#[command(rename = "lowercase", description = "These commands are supported:")]
 pub enum Command {
-    #[command(description = r#"Display this text, and commands help
-        /help <command (default: all)>
-        Example:
-            /hlep run
-            "#)]
+    #[command(parse_with = "split")]
     Help,
-    #[command(
-        description = r#"Reply to message with this command to execute Rust code 🦀⚙️
-        /run <version (default: stable)> <mode (default: debug)> <edition (default: 2021)>
-        Example:
-            /run stable debug 2021
-            "#,
-        parse_with = "split"
-    )]
+    #[command(parse_with = "split")]
     Run {
         version: String,
         mode: String,
         edition: String,
     },
-    #[command(
-        description = r#"Reply to message with this command to share Rust code 🦀🔗
-        /share <version (default: stable)> <mode (default: debug)> <edition (default: 2021)>
-        Example:
-            /share stable debug 2021"#,
-        parse_with = "split"
-    )]
+    #[command(parse_with = "split")]
     Share {
         version: String,
         mode: String,
@@ -770,7 +752,10 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                 } else if command == "start" {
                     let mut vars: HashMap<String, String> = HashMap::new();
                     vars.insert("bot_username".to_string(), bot_username(&bot).await);
-                    vars.insert("attempts_maximum".to_string(), author.attempts.to_string());
+                    vars.insert(
+                        "attempts_maximum".to_string(),
+                        (author.attempts_maximum - author.attempts).to_string(),
+                    );
                     vars.insert(
                         "command_delay".to_string(),
                         Config::get_or_add("command_delay", "15", conn).value,
