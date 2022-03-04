@@ -13,11 +13,13 @@ chrono = "0.4.19"
 diesel = {version = "1.4.4", features = ["sqlite", "chrono"]}
 dotenv = "0.15.0"
 futures = "0.3.21"
+json-gettext = "4.0.0"
 log = "0.4.14"
 pretty_env_logger = "0.4.0"
 rand = {version = "0.8.4", features = ["std_rng"]}
 reqwest = {version = "0.11.9", features = ["json"]}
 serde = "1.0.136"
+strfmt = "0.1.6"
 teloxide = {version = "0.7.0", features = ["macros", "auto-send", "dispatching2", "ctrlc_handler"]}
 tokio = {version = "1.16.1", features = ["rt-multi-thread", "macros"]}
 tokio-stream = "0.1.8"
