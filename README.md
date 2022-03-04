@@ -2,6 +2,11 @@
   <img width=300 src="https://rustacean.net/assets/rustacean-flat-happy.png">
   <h1>RPG_BOT (Rust Playground Bot)</h1>
   <p><a href="https://telegram.org/">Telegram</a> bot help you to run Rust code in <a href="https://telegram.org/">Telegram</a> via <a href="https://play.rust-lang.org/">Rust playground</a></p>
+  Languages we support it<br>
+   ( AR 🇸🇦 - EN 🇺🇸 - RU 🇷🇺 )
+   <br>
+  <a href="https://github.com/TheAwiteb/rpg_bot#Add-new-language">Add New Language</a>
+  <br><br>
   <a href="https://opensource.org/licenses/MIT">
     <img src="https://img.shields.io/badge/license-MIT-orange.svg" alt="License">
   </a>
@@ -64,6 +69,9 @@
       </ul>
     </li>
     <li>
+      <a href="#Add-new-language">Add new language</a>
+    </li>
+    <li>
       <a href="#Images">Images</a>
       <ul>
           <li><a href="#Help-Message">Help Message</a></li>
@@ -98,12 +106,12 @@ The bot supports 3 straightforward commands:
 - Beautiful telegram keyboard.
 - Conditions that protect Rust Playground, including the inability to publish sources that are not in the Rust language, and also the inability to publish a source that was published in the same process (and with run as well).
 - Delete the sources periodically (to prevent accumulation and increase in size).
+- Languages support (You can [add new language](https://github.com/TheAwiteb/rpg_bot#Add-new-language)).
+<!-- - Possibility to [Broadcast messages](https://www.dictionary.com/browse/broadcast) to all users 🤩 -->
 <!-- - Do not save a previously saved source (the saved one is used). -->
 <!-- - Admin interface -->
-<!-- - Languages support (You can add new language). -->
 <!-- - Possibility to adjust the limit and the delay time for each user. -->
 <!-- - Possibility to set more than one admin. -->
-<!-- - The ability to modify messages from the bot. -->
 
 ## Installation
 ### Building
@@ -134,6 +142,9 @@ sudo docker run -ti --rm rpg_bot
 cargo run --release
 ```
 
+## Add new language
+To add a new language, it is very simple, just add a file with type [json](https://en.wikipedia.org/wiki/JSON) in the folder [i18n](i18n) that contains the sentences in the rest of the files and then do PR (preferably add the name of the new language in the [README.md](README.md) and also in the [`languages_ctx`](https://github.com/TheAwiteb/rpg_bot/blob/master/src/rpg_db.rs#L30) function, but don't worry, if you don't do this, we will do it)
+
 ## Images
 ### Help Message
 [![help_message](https://i.suar.me/nzYza/s)](https://i.suar.me/nzYza)
@@ -143,6 +154,9 @@ cargo run --release
 
 ### Share Command
 [![share_command](https://i.suar.me/289jQ/s)](https://i.suar.me/289jQ)
+
+### Languages
+[![language_command](https://i.suar.me/aZ11z/s)](https://i.suar.me/aZ11z/s)
 
 ## License
 The [GNU Affero General Public](https://www.gnu.org/licenses/agpl-3.0.en.html) License is a free, copyleft license for software and other kinds of works, specifically designed to ensure cooperation with the community in the case of network server software.

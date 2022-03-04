@@ -43,6 +43,7 @@ table! {
         username -> Nullable<Text>,
         telegram_id -> Text,
         telegram_fullname -> Text,
+        language -> Text,
         attempts -> Integer,
         attempts_maximum -> Integer,
         last_command_record -> Nullable<Timestamp>,

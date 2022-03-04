@@ -32,6 +32,7 @@ pub struct Users {
     pub username: Option<String>,
     pub telegram_id: String,
     pub telegram_fullname: String,
+    pub language: String,
     pub attempts: i32,
     pub attempts_maximum: i32,
     pub last_command_record: Option<NaiveDateTime>,
@@ -293,6 +294,20 @@ impl Users {
             .set(last_button_record.eq(timestamp))
             .execute(conn)?;
         self.last_button_record = Some(timestamp);
+        Ok(()) // The attempt make it in `share_run_answer`
+    }
+
+    /// update `language`
+    pub async fn update_language(
+        &mut self,
+        new_language: &str,
+        conn: &mut SqliteConnection,
+    ) -> DieselResult<()> {
+        use super::schema::users::dsl::{language, users};
+        update(users.find(self.id))
+            .set(language.eq(new_language))
+            .execute(conn)?;
+        self.language = new_language.into();
         Ok(()) // The attempt make it in `share_run_answer`
     }
 
