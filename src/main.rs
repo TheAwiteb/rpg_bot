@@ -18,13 +18,14 @@
 
 #[macro_use]
 extern crate diesel;
+extern crate json_gettext;
+extern crate strfmt;
 
 use dotenv::dotenv;
 use teloxide::{dispatching2::UpdateFilterExt, prelude2::*, types::Update};
 
 mod bot;
 mod keyboards;
-mod messages;
 mod models;
 mod rpg;
 mod rpg_db;
