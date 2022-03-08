@@ -580,33 +580,51 @@ async fn update_options(
     }
 }
 
+/// Answer to change langauge request (CallbackQuery and Message)
 async fn change_langauge(
     bot: &AutoSend<Bot>,
     author: &mut Users,
     message_id: i32,
     chat_id: i64,
     new_language: &str,
+    query_id: &str,
 ) {
     let ctx = languages_ctx();
     let new_language = new_language.replace("_", " ");
-    author
-        .update_language(&new_language, &mut rpg_db::establish_connection())
+
+    // if new language same old one
+    if new_language == author.language {
+        bot.answer_callback_query(query_id)
+            .text(
+                get_text!(ctx, &new_language, "ALREADY_CURRENT_LANGUAGE")
+                    .unwrap()
+                    .to_string()
+                    + " 🤨",
+            )
+            .send()
+            .await
+            .log_on_error()
+            .await;
+    } else {
+        author
+            .update_language(&new_language, &mut rpg_db::establish_connection())
+            .await
+            .log_on_error()
+            .await;
+        bot.edit_message_text(
+            chat_id,
+            message_id,
+            get_text!(ctx, &new_language, "CHANGE_LANGUAGE_SUCCESSFULLY")
+                .unwrap()
+                .to_string()
+                + " 🤖",
+        )
+        .reply_markup(keyboards::add_lang_keyboard(&new_language))
+        .send()
         .await
         .log_on_error()
         .await;
-    bot.edit_message_text(
-        chat_id,
-        message_id,
-        get_text!(ctx, &new_language, "CHANGE_LANGUAGE_SUCCESSFULLY")
-            .unwrap()
-            .to_string()
-            + " 🤖",
-    )
-    .reply_markup(keyboards::add_lang_keyboard(&new_language))
-    .send()
-    .await
-    .log_on_error()
-    .await;
+    }
 }
 
 /// Run and Share command handler
@@ -907,6 +925,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                         message.id,
                         message.chat.id,
                         args.next().expect("change_lang don't have new_language"),
+                        &callback_query.id,
                     )
                     .await;
                 }
