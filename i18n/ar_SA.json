@@ -11,6 +11,7 @@
   "EXCEEDED_ATTEMPTS_MESSAGE": "عذرا ، لقد تجاوزت {attempts_maximum} محاولة مسموحة لك",
   "HELP_HELP": "اظهار هذه الرسالة، ورسائل مساعدة الاوامر الاخرى\n   الامر: /help <الامر (افتراضيا:جميعهم)>\nمثال:\n    /hlep run",
   "HELP_MESSAGE": "/help - {help_help}\n\n/run - {help_run}\n\n/share - {help_share}\n\n/language - {help_language}",
+  "INFO_MESSAGE": "اهلا {full_name}\nاللغة الخاصة بك: العربية\nمدة الانتظار بين الاوامر: {command_delay}\nمدة الانتظار بين الازرار: {button_delay}\nاجمالي عدد محاولات استخدام البوت لديك: {attempts_maximum}\nالمستخدم منها: {attempts}\nالمتبقي: {attempts_have}",
   "LANGUAGE_HELP": "امكانية تغير لغة البوت، الامر بسيط ارسله وسوف يتم ارسال قائمة باللغات المتوفرة ويمكنك الاختيار منها\nمثال\n    /language",
   "MODE": "الحالة",
   "MODE_OF_CODE": "حالة_الكود",

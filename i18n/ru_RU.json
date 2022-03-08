@@ -11,6 +11,7 @@
   "EXCEEDED_ATTEMPTS_MESSAGE": "Извините, вы превысили допустимую попытку {attempts_maximum}",
   "HELP_HELP": "Показать этот текст и команды help\n    /help <команда (по умолчанию: все)>\nПример:\n    /hlep run",
   "HELP_MESSAGE": "/help - {help_help}\n\n/run - {help_run}\n\n/share - {help_share}\n\n/language - {help_language}",
+  "INFO_MESSAGE": "Привет {full_name}\nВаш язык: русский\nЗадержка команды: {command_delay}\nЗадержка кнопки: {button_delay}\nВсего попыток: {attempts_maximum}\nИспользовано попыток: {attempts}\nОсталось: {attempts_have}",
   "LANGUAGE_HELP": "Возможность смены языка бота, дело простое, отправьте его и будет выслан список доступных языков, и вы сможете выбрать из них \nПример \n    /language",
   "MODE": "Режим",
   "MODE_OF_CODE": "Режим_кода",
