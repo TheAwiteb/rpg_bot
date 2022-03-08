@@ -627,6 +627,40 @@ async fn change_langauge(
     }
 }
 
+pub fn info_text(author: &Users) -> String {
+    let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
+    let ctx = languages_ctx();
+    let mut vars: HashMap<String, String> = HashMap::new();
+    vars.insert("full_name".into(), author.telegram_fullname.clone());
+    vars.insert(
+        "command_delay".into(),
+        // default value is 15
+        Config::get_or_add("command_delay", "15", &mut rpg_db::establish_connection()).value,
+    );
+    vars.insert(
+        "button_delay".to_string(),
+        // default value is 2
+        Config::get_or_add("button_delay", "2", conn).value,
+    );
+    vars.insert(
+        "attempts_maximum".into(),
+        author.attempts_maximum.to_string(),
+    );
+    vars.insert("attempts".into(), author.attempts.to_string());
+    vars.insert(
+        "attempts_have".into(),
+        (author.attempts_maximum - author.attempts).to_string(),
+    );
+
+    strfmt(
+        &get_text!(ctx, &author.language, "INFO_MESSAGE")
+            .unwrap()
+            .to_string(),
+        &vars,
+    )
+    .unwrap()
+}
+
 /// Run and Share command handler
 pub async fn command_handler(
     bot: &AutoSend<Bot>,
@@ -671,10 +705,10 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
             bot_username(&bot).await.to_ascii_lowercase(),
         ) {
             // Is command
-            if author.can_send_command(conn) || message.reply_to_message().is_none() {
-                // we have two command need to make record of them, (`run`, `share`), `run` and `share` commands need reply message to work
-                // Can send command
-
+            if author.can_send_command(conn)
+                || (["run".into(), "share".into()].contains(&command)
+                    && message.reply_to_message().is_none())
+            {
                 let ctx = languages_ctx();
                 let command: String = command.to_ascii_lowercase();
                 if ["run".into(), "share".into()].contains(&command) {
@@ -802,6 +836,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     .log_on_error()
                     .await;
                 } else if command == "language" {
+                    author.make_command_record(conn).await.log_on_error().await;
                     bot.send_message(
                         message.chat.id,
                         get_text!(ctx, &author.language, "NEW_LANGUAGE_MESSAGE")
@@ -815,6 +850,14 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     .await
                     .log_on_error()
                     .await;
+                } else if command == "info" {
+                    author.make_command_record(conn).await.log_on_error().await;
+                    bot.send_message(message.chat.id, info_text(&author))
+                        .reply_to_message_id(message.id)
+                        .send()
+                        .await
+                        .log_on_error()
+                        .await
                 };
             } else {
                 // Cannot send command
