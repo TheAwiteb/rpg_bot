@@ -94,12 +94,17 @@
 ## Bot interface
 
 The bot supports 3 straightforward commands:
-- `/help <command (default: all)>` — help message for all or specified command.
+- `/start` - Introductory message to the bot.
 
-- `/run <version (default: stable)> <mode (default: debug)> <edition (default: 2021)>` — use this command with reply to code you want to execute it.
+- `/help <command (default: all)>` — Help message for all or specified command.
 
-- `/share <version (default: stable)> <mode (default: debug)> <edition (default: 2021)>` — use this command with reply to code you want to share it.
+- `/run <version (default: stable)> <mode (default: debug)> <edition (default: 2021)>` — Use this command with reply to code you want to execute it.
 
+- `/share <version (default: stable)> <mode (default: debug)> <edition (default: 2021)>` — Use this command with reply to code you want to share it.
+
+- `/language` - Show a keyboard with languages that can be changed to.
+
+- `/info` - Show your information.
 ## Features
 - Use [ORM](https://en.wikipedia.org/wiki/Object%E2%80%93relational_mapping) database with [Diesel](https://github.com/diesel-rs/diesel).
 - Delay for each user.  <!-- (You can update it from bot) -->
