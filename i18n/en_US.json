@@ -1,5 +1,6 @@
 {
   "ADD_NEW_LANGUAGE": "Add another language?",
+  "ALREADY_CURRENT_LANGUAGE": "This is already the current language",
   "ALREADY_RUN": "The source code has already run",
   "ALREADY_SHARE": "The source code has already share",
   "CANNOT_RUN_INVALID_CODE": "Cannot_run_invalid_source_code_🤨",
