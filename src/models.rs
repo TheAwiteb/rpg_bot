@@ -119,10 +119,10 @@ impl TryFrom<(&NewUser, &mut SqliteConnection)> for Users {
 impl From<&TelegramUser> for NewUser {
     /// Returns new user object from telegram user
     fn from(user: &TelegramUser) -> Self {
-        let fullname = format!(
-            "{} {}",
+        let fullname: String = format!(
+            "{}{}",
             user.first_name,
-            user.last_name.clone().unwrap_or(String::new())
+            (" ".to_owned() + &user.last_name.clone().unwrap_or(String::new())).trim()
         );
         Self::new(user.username.clone(), user.id.to_string(), fullname)
     }
@@ -265,6 +265,8 @@ impl SourceCode {
 }
 
 impl Users {
+    // TODO: method to update user (Username and full name)
+
     /// Add attempt to user attempts
     pub async fn make_attempt(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
         use super::schema::users::dsl::{attempts, telegram_id, users};
