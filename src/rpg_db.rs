@@ -22,6 +22,7 @@ use crate::{
 };
 use diesel::prelude::*;
 use futures::executor::block_on;
+use json_gettext::{static_json_gettext_build, JSONGetText};
 use std::env;
 use teloxide::types::User as TelegramUser;
 
@@ -30,6 +31,17 @@ pub fn establish_connection() -> SqliteConnection {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     SqliteConnection::establish(&database_url)
         .expect(&format!("Error connecting to {}", database_url))
+}
+
+/// Returns ctx of languages
+pub fn languages_ctx() -> JSONGetText<'static> {
+    static_json_gettext_build!(
+        "English 🇺🇸";
+        "العربية 🇸🇦" => "./i18n/ar_SA.json",
+        "English 🇺🇸" => "./i18n/en_US.json",
+        "русский 🇷🇺" => "./i18n/ru_RU.json",
+    )
+    .unwrap()
 }
 
 /// Returns old/new user from telegram user object

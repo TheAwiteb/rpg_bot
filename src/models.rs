@@ -32,6 +32,7 @@ pub struct Users {
     pub username: Option<String>,
     pub telegram_id: String,
     pub telegram_fullname: String,
+    pub language: String,
     pub attempts: i32,
     pub attempts_maximum: i32,
     pub last_command_record: Option<NaiveDateTime>,
@@ -118,10 +119,10 @@ impl TryFrom<(&NewUser, &mut SqliteConnection)> for Users {
 impl From<&TelegramUser> for NewUser {
     /// Returns new user object from telegram user
     fn from(user: &TelegramUser) -> Self {
-        let fullname = format!(
-            "{} {}",
+        let fullname: String = format!(
+            "{}{}",
             user.first_name,
-            user.last_name.clone().unwrap_or(String::new())
+            (" ".to_owned() + &user.last_name.clone().unwrap_or(String::new())).trim()
         );
         Self::new(user.username.clone(), user.id.to_string(), fullname)
     }
@@ -264,6 +265,8 @@ impl SourceCode {
 }
 
 impl Users {
+    // TODO: method to update user (Username and full name)
+
     /// Add attempt to user attempts
     pub async fn make_attempt(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
         use super::schema::users::dsl::{attempts, telegram_id, users};
@@ -293,6 +296,20 @@ impl Users {
             .set(last_button_record.eq(timestamp))
             .execute(conn)?;
         self.last_button_record = Some(timestamp);
+        Ok(()) // The attempt make it in `share_run_answer`
+    }
+
+    /// update `language`
+    pub async fn update_language(
+        &mut self,
+        new_language: &str,
+        conn: &mut SqliteConnection,
+    ) -> DieselResult<()> {
+        use super::schema::users::dsl::{language, users};
+        update(users.find(self.id))
+            .set(language.eq(new_language))
+            .execute(conn)?;
+        self.language = new_language.into();
         Ok(()) // The attempt make it in `share_run_answer`
     }
 

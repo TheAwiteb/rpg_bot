@@ -16,18 +16,26 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::{messages, models::SourceCode};
+use crate::{models::SourceCode, rpg_db::languages_ctx};
+use json_gettext::get_text;
 use reqwest::Url;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-pub fn repo_keyboard() -> InlineKeyboardMarkup {
+pub fn repo_keyboard(language: &str) -> InlineKeyboardMarkup {
+    let ctx = languages_ctx();
     InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::url(
-        "Repository 🦀".to_string(),
+        get_text!(ctx, language, "REPOSITORY").unwrap().to_string() + " 🦀",
         Url::parse("https://github.com/TheAwiteb/rpg_bot").unwrap(),
     )]])
 }
 
-fn option_keyboard(version: &str, mode: &str, edition: &str, code: &str) -> InlineKeyboardMarkup {
+fn option_keyboard(
+    version: &str,
+    mode: &str,
+    edition: &str,
+    code: &str,
+    language: &str,
+) -> InlineKeyboardMarkup {
     // keyboard will be like this
     //
     // Version 📦 | Mode ​🚀​   | Edition ​⚡
@@ -37,11 +45,30 @@ fn option_keyboard(version: &str, mode: &str, edition: &str, code: &str) -> Inli
     //
     let check = "⬅️";
     let uncheck = "-";
+    let ctx = languages_ctx();
 
     let mut keyboard: InlineKeyboardMarkup = InlineKeyboardMarkup::new([[
-        InlineKeyboardButton::callback("Version 📦".into(), "print Version_of_code_📦".into()),
-        InlineKeyboardButton::callback("Mode ​🚀​".into(), "print Mode_of_code_🚀".into()),
-        InlineKeyboardButton::callback("Edition ​⚡​".into(), "print Edition_of_code_⚡".into()),
+        InlineKeyboardButton::callback(
+            get_text!(ctx, language, "VERSION").unwrap().to_string() + " 📦",
+            format!(
+                "print {}",
+                get_text!(ctx, language, "VERSION_OF_CODE").unwrap()
+            ) + "_📦",
+        ),
+        InlineKeyboardButton::callback(
+            get_text!(ctx, language, "MODE").unwrap().to_string() + " 🚀​",
+            format!(
+                "print {}",
+                get_text!(ctx, language, "MODE_OF_CODE").unwrap()
+            ) + "_🚀",
+        ),
+        InlineKeyboardButton::callback(
+            get_text!(ctx, language, "EDITION").unwrap().to_string() + " ​⚡​",
+            format!(
+                "print {}",
+                get_text!(ctx, language, "EDITION_OF_CODE").unwrap()
+            ) + "_⚡​",
+        ),
     ]]);
     let buttons: [&str; 9] = [
         "Stable", "Debug", "2015", "Beta", "Release", "2018", "Nightly", "-", "2021",
@@ -72,18 +99,36 @@ fn option_keyboard(version: &str, mode: &str, edition: &str, code: &str) -> Inli
     keyboard
 }
 
+pub fn add_lang_keyboard(language: &str) -> InlineKeyboardMarkup {
+    let ctx = languages_ctx();
+    InlineKeyboardMarkup::new([[InlineKeyboardButton::url(
+        get_text!(ctx, language, "ADD_NEW_LANGUAGE")
+            .unwrap()
+            .to_string()
+            + " 🤩",
+        Url::parse("https://github.com/TheAwiteb/rpg_bot#Add-new-language").unwrap(),
+    )]])
+}
+
 pub fn view_run_keyboard(
     code: Option<String>,
     already_use_keyboard: bool,
     is_valid_source: bool,
+    language: &str,
 ) -> InlineKeyboardMarkup {
+    let ctx = languages_ctx();
     InlineKeyboardMarkup::new([[InlineKeyboardButton::callback(
-        "Run 🦀⚙️".into(),
+        get_text!(ctx, language, "RUN").unwrap().to_string() + " 🦀⚙️",
         if is_valid_source {
             // if source code is valid, the code will be valid
             format!("viewR {} {}", code.unwrap(), already_use_keyboard)
         } else {
-            format!("print {}", messages::CANNOT_RUN_INVALID_CODE)
+            format!(
+                "print {}",
+                get_text!(ctx, language, "CANNOT_RUN_INVALID_CODE")
+                    .unwrap()
+                    .to_string()
+            )
         },
     )]])
 }
@@ -92,26 +137,72 @@ pub fn view_share_keyboard(
     code: Option<String>,
     already_use_keyboard: bool,
     is_valid_source: bool,
+    language: &str,
 ) -> InlineKeyboardMarkup {
+    let ctx = languages_ctx();
+
     InlineKeyboardMarkup::new([[InlineKeyboardButton::callback(
-        "Share 🦀🔗".into(),
+        get_text!(ctx, language, "SHARE").unwrap().to_string() + " 🦀🔗",
         if is_valid_source {
             // if source code is valid, the code will be valid
             format!("viewS {} {}", code.unwrap(), already_use_keyboard)
         } else {
-            format!("print {}", messages::CANNOT_SHARE_INVALID_CODE)
+            format!(
+                "print {}",
+                get_text!(ctx, language, "CANNOT_SHARE_INVALID_CODE")
+                    .unwrap()
+                    .to_string()
+            )
         },
     )]])
 }
 
-pub fn run_keyboard(source: SourceCode) -> InlineKeyboardMarkup {
-    option_keyboard(&source.version, &source.mode, &source.edition, &source.code).append_row([
-        InlineKeyboardButton::callback("Run 🦀⚙️".into(), format!("run {}", source.code)),
-    ])
+pub fn run_keyboard(source: SourceCode, language: &str) -> InlineKeyboardMarkup {
+    let ctx = languages_ctx();
+
+    option_keyboard(
+        &source.version,
+        &source.mode,
+        &source.edition,
+        &source.code,
+        language,
+    )
+    .append_row([InlineKeyboardButton::callback(
+        get_text!(ctx, language, "RUN").unwrap().to_string() + " 🦀⚙️",
+        format!("run {}", source.code),
+    )])
 }
 
-pub fn share_keyboard(source: SourceCode) -> InlineKeyboardMarkup {
-    option_keyboard(&source.version, &source.mode, &source.edition, &source.code).append_row([
-        InlineKeyboardButton::callback("Share 🦀🔗".into(), format!("share {}", source.code)),
-    ])
+pub fn share_keyboard(source: SourceCode, language: &str) -> InlineKeyboardMarkup {
+    let ctx = languages_ctx();
+
+    option_keyboard(
+        &source.version,
+        &source.mode,
+        &source.edition,
+        &source.code,
+        language,
+    )
+    .append_row([InlineKeyboardButton::callback(
+        get_text!(ctx, language, "SHARE").unwrap().to_string() + " 🦀🔗",
+        format!("share {}", source.code),
+    )])
+}
+pub fn languages_keyboard(language: &str) -> InlineKeyboardMarkup {
+    let ctx = languages_ctx();
+
+    InlineKeyboardMarkup::new(
+        ctx.get_keys()
+            .into_iter()
+            .map(|lang: &str| {
+                InlineKeyboardButton::callback(
+                    format!("{}{}", if language == lang { "🌟 " } else { "" }, lang),
+                    format!("change_lang {}", lang.replace(" ", "_")),
+                )
+            })
+            .collect::<Vec<InlineKeyboardButton>>()
+            .chunks(2)
+            .map(|row: &[InlineKeyboardButton]| row.to_vec()),
+    )
+    .append_row(add_lang_keyboard(language).inline_keyboard[0].clone())
 }
