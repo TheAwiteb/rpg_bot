@@ -206,7 +206,7 @@ async fn send_wait_message(
         .await?)
 }
 
-fn delay_error_message(author: &Users, is_command: bool) -> String {
+fn delay_error_message(author: &Users, is_command: bool, conn: &mut SqliteConnection) -> String {
     let mut vars: HashMap<String, String> = HashMap::new();
     let ctx = languages_ctx();
 
@@ -222,13 +222,13 @@ fn delay_error_message(author: &Users, is_command: bool) -> String {
         .timestamp()
             + if is_command {
                 // default value is 15
-                Config::get_or_add("command_delay", "15", &mut rpg_db::establish_connection())
+                Config::get_or_add("command_delay", "15", conn)
                     .value
                     .parse::<i64>()
                     .expect("`command_delay` config should be integer")
             } else {
                 // default value is 2
-                Config::get_or_add("button_delay", "2", &mut rpg_db::establish_connection())
+                Config::get_or_add("button_delay", "2", conn)
                     .value
                     .parse::<i64>()
                     .expect("`button_delay` config should be integer")
@@ -278,6 +278,7 @@ async fn share_run_answer(
     message: &Message,
     author: &mut Users,
     code: rpg::Code,
+    conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let output: Result<String, String> = if command.name() == "run" {
         rpg::run(&code).await
@@ -286,11 +287,7 @@ async fn share_run_answer(
     };
 
     let code: Option<String> = if output.is_ok() {
-        Some(
-            rpg_db::create_source(&mut rpg_db::establish_connection(), &code, author)
-                .unwrap()
-                .code,
-        )
+        Some(rpg_db::create_source(conn, &code, author).unwrap().code)
     } else {
         None
     };
@@ -321,10 +318,7 @@ async fn share_run_answer(
             },
         )
     };
-    author
-        .make_attempt(&mut rpg_db::establish_connection())
-        .log_on_error()
-        .await;
+    author.make_attempt(conn).log_on_error().await;
     bot.edit_message_text(
         // For text messages, the actual UTF-8 text of the message, 0-4096 characters
         // https://core.telegram.org/bots/api#message
@@ -353,37 +347,38 @@ pub async fn share_run_answer_message(
     bot: &AutoSend<Bot>,
     message: &Message,
     command: &Command,
-    version: &str,
-    mode: &str,
-    edition: &str,
     language: &str,
+    conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    SourceCode::filter_source_codes(&mut rpg_db::establish_connection()).unwrap();
+    SourceCode::filter_source_codes(conn).unwrap();
     let source_code_message: &Message = message.reply_to_message().unwrap();
     if let Some(source_code) = source_code_message.text() {
-        let code: rpg::Code = rpg::Code::new(source_code, version, mode, edition);
-        if let Err(err) = code.is_valid() {
-            bot.send_message(message.chat.id, err)
-                .reply_to_message_id(message.id)
-                .send()
+        if let Some((version, mode, edition)) = command.args() {
+            let code: rpg::Code = rpg::Code::new(source_code, version, mode, edition);
+            if let Err(err) = code.is_valid() {
+                bot.send_message(message.chat.id, err)
+                    .reply_to_message_id(message.id)
+                    .send()
+                    .await
+                    .log_on_error()
+                    .await;
+            } else {
+                let reply_message: Message =
+                    replay_wait_message(bot, message.chat.id, message.id, command, language)
+                        .await?;
+                share_run_answer(
+                    bot,
+                    command,
+                    false,
+                    &reply_message,
+                    &mut rpg_db::get_user(conn, message.from().unwrap()).unwrap(),
+                    code,
+                    conn,
+                )
                 .await
                 .log_on_error()
                 .await;
-        } else {
-            let reply_message: Message =
-                replay_wait_message(bot, message.chat.id, message.id, command, language).await?;
-            share_run_answer(
-                bot,
-                command,
-                false,
-                &reply_message,
-                &mut rpg_db::get_user(&mut rpg_db::establish_connection(), message.from().unwrap())
-                    .unwrap(),
-                code,
-            )
-            .await
-            .log_on_error()
-            .await;
+            }
         }
     } else {
         let ctx = languages_ctx();
@@ -409,6 +404,7 @@ pub async fn share_run_answer_cllback(
     code: rpg::Code,
     author: &User,
     language: &str,
+    conn: &mut SqliteConnection,
 ) -> Result<(), RequestError> {
     let message: Message =
         send_wait_message(bot, chat_id, &Command::from((&code, command)), language)
@@ -419,8 +415,9 @@ pub async fn share_run_answer_cllback(
         &Command::from((&code, command)),
         true,
         &message,
-        &mut rpg_db::get_user(&mut rpg_db::establish_connection(), author).unwrap(),
+        &mut rpg_db::get_user(conn, author).unwrap(),
         code,
+        conn,
     )
     .await
     .log_on_error()
@@ -453,8 +450,8 @@ fn get_args(args: Vec<&str>) -> Vec<String> {
 }
 
 /// returns None that mean the message is deleted else message content
-fn get_source_code(code: &str) -> Option<SourceCode> {
-    SourceCode::get_by_code(code, &mut rpg_db::establish_connection()).ok()
+fn get_source_code(code: &str, conn: &mut SqliteConnection) -> Option<SourceCode> {
+    SourceCode::get_by_code(code, conn).ok()
 }
 
 async fn cannot_reached_answer(bot: &AutoSend<Bot>, query_id: &str, language: &str) {
@@ -477,10 +474,11 @@ async fn run_share_callback(
     command: &str,
     code: String,
     language: &str,
+    conn: &mut SqliteConnection,
 ) {
     // share and run commands need source code
     // if get_source_code returns None that mean the source code message is deleted
-    if let Some(source_code) = get_source_code(&code) {
+    if let Some(source_code) = get_source_code(&code, conn) {
         let message: Message = callback_query.clone().message.unwrap();
         let keyboard: InlineKeyboardMarkup = if command == "share" {
             keyboards::view_share_keyboard(Some(code), true, true, language)
@@ -494,7 +492,8 @@ async fn run_share_callback(
                 command,
                 source_code.into(),
                 &callback_query.from,
-                language
+                language,
+                conn
             ),
             bot.edit_message_reply_markup(message.chat.id, message.id)
                 .reply_markup(keyboard)
@@ -514,8 +513,9 @@ async fn update_options(
     option_name: &str,
     option_value: &str,
     language: &str,
+    conn: &mut SqliteConnection,
 ) {
-    if let Ok(mut source) = SourceCode::get_by_code(code, &mut rpg_db::establish_connection()) {
+    if let Ok(mut source) = SourceCode::get_by_code(code, conn) {
         let mut vars: HashMap<String, String> = HashMap::new();
         let ctx = languages_ctx();
 
@@ -541,11 +541,7 @@ async fn update_options(
             .send();
 
         source
-            .update_by_name(
-                option_name,
-                option_value,
-                &mut rpg_db::establish_connection(),
-            )
+            .update_by_name(option_name, option_value, conn)
             .log_on_error()
             .await;
 
@@ -581,6 +577,7 @@ async fn change_langauge(
     chat_id: i64,
     new_language: &str,
     query_id: &str,
+    conn: &mut SqliteConnection,
 ) {
     let ctx = languages_ctx();
     let new_language = new_language.replace("_", " ");
@@ -600,7 +597,7 @@ async fn change_langauge(
             .await;
     } else {
         author
-            .update_language(&new_language, &mut rpg_db::establish_connection())
+            .update_language(&new_language, conn)
             .log_on_error()
             .await;
         bot.edit_message_text(
@@ -619,15 +616,14 @@ async fn change_langauge(
     }
 }
 
-pub fn info_text(author: &Users) -> String {
-    let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
+pub fn info_text(author: &Users, conn: &mut SqliteConnection) -> String {
     let ctx = languages_ctx();
     let mut vars: HashMap<String, String> = HashMap::new();
     vars.insert("full_name".into(), author.telegram_fullname.clone());
     vars.insert(
         "command_delay".into(),
         // default value is 15
-        Config::get_or_add("command_delay", "15", &mut rpg_db::establish_connection()).value,
+        Config::get_or_add("command_delay", "15", conn).value,
     );
     vars.insert(
         "button_delay".to_string(),
@@ -659,37 +655,37 @@ pub async fn command_handler(
     message: &Message,
     command: &Command,
     language: &str,
+    conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    if let Some((version, mode, edition)) = command.args() {
-        // Share and Run command need reply message
-        if message.reply_to_message().is_some() {
-            share_run_answer_message(bot, message, command, version, mode, edition, language)
-                .await
-                .log_on_error()
-                .await;
-        } else {
-            let ctx = languages_ctx();
-            // If there is no reply message
-            bot.send_message(
-                message.chat.id,
-                get_text!(ctx, language, "REPLY_MESSAGE")
-                    .unwrap()
-                    .to_string(),
-            )
-            .reply_to_message_id(message.id)
-            .send()
+    // Share and Run command need reply message
+    if message.reply_to_message().is_some() {
+        share_run_answer_message(bot, message, command, language, conn)
             .await
             .log_on_error()
             .await;
-        };
+    } else {
+        let ctx = languages_ctx();
+        // If there is no reply message
+        bot.send_message(
+            message.chat.id,
+            get_text!(ctx, language, "REPLY_MESSAGE")
+                .unwrap()
+                .to_string(),
+        )
+        .reply_to_message_id(message.id)
+        .send()
+        .await
+        .log_on_error()
+        .await;
     };
 
     Ok(())
 }
 
 pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
-    let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
     if let Some(text) = message.text() {
+        let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
+
         let mut author: Users = rpg_db::get_user(conn, message.from().unwrap()).unwrap();
 
         if let Some((command, args)) = parse_command(
@@ -725,6 +721,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                                 edition: code_args.next().unwrap(),
                             },
                             &author.language,
+                            conn,
                         )
                         .await
                         .log_on_error()
@@ -739,6 +736,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                                 edition: code_args.next().unwrap(),
                             },
                             &author.language,
+                            conn,
                         )
                         .await
                         .log_on_error()
@@ -849,7 +847,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     .await;
                 } else if command == "info" {
                     author.make_command_record(conn).log_on_error().await;
-                    bot.send_message(message.chat.id, info_text(&author))
+                    bot.send_message(message.chat.id, info_text(&author, conn))
                         .reply_to_message_id(message.id)
                         .send()
                         .await
@@ -863,7 +861,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     if author.attempts >= author.attempts_maximum {
                         attempt_error_message(&author)
                     } else {
-                        delay_error_message(&author, true)
+                        delay_error_message(&author, true, conn)
                     },
                 )
                 .reply_to_message_id(message.id)
@@ -916,6 +914,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                             .parse()
                             .unwrap(),
                         &author.language,
+                        conn,
                     )
                     .await;
                 }
@@ -942,6 +941,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                             .expect("share/run command don't have code")
                             .to_string(),
                         &author.language,
+                        conn,
                     )
                     .await;
                 }
@@ -954,6 +954,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                         args.next().expect("option command don't have option_name"),
                         args.next().expect("option command don't have option_value"),
                         &author.language,
+                        conn,
                     )
                     .await;
                 }
@@ -966,6 +967,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                         message.chat.id,
                         args.next().expect("change_lang don't have new_language"),
                         &callback_query.id,
+                        conn,
                     )
                     .await;
                 }
@@ -976,7 +978,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                 .text(if author.attempts >= author.attempts_maximum {
                     attempt_error_message(&author)
                 } else {
-                    delay_error_message(&author, false)
+                    delay_error_message(&author, false, conn)
                 })
                 .send()
                 .await
@@ -993,10 +995,11 @@ async fn view_handler(
     code: &str,
     already_use_keyboard: bool,
     language: &str,
+    conn: &mut SqliteConnection,
 ) {
     if already_use_keyboard {
         already_use_answer(bot, &callback_query.id, language, view == "viewR").await;
-    } else if let Ok(source) = SourceCode::get_by_code(code, &mut rpg_db::establish_connection()) {
+    } else if let Ok(source) = SourceCode::get_by_code(code, conn) {
         // unwrap here because every callback query have message 🙂
         let message: Message = callback_query.clone().message.unwrap();
         let keyboard: InlineKeyboardMarkup = if view == "viewR" {
