@@ -119,12 +119,7 @@ impl TryFrom<(&NewUser, &mut SqliteConnection)> for Users {
 impl From<&TelegramUser> for NewUser {
     /// Returns new user object from telegram user
     fn from(user: &TelegramUser) -> Self {
-        let fullname: String = format!(
-            "{}{}",
-            user.first_name,
-            (" ".to_owned() + &user.last_name.clone().unwrap_or_default()).trim()
-        );
-        Self::new(user.username.clone(), user.id.to_string(), fullname)
+        Self::new(user.username.clone(), user.id.to_string(), user.full_name())
     }
 }
 
