@@ -21,7 +21,6 @@ use crate::{
     rpg::Code,
 };
 use diesel::prelude::*;
-use futures::executor::block_on;
 use json_gettext::{static_json_gettext_build, JSONGetText};
 use std::env;
 use teloxide::types::User as TelegramUser;
@@ -45,19 +44,21 @@ pub fn languages_ctx() -> JSONGetText<'static> {
 }
 
 /// Returns old/new user from telegram user object
-pub async fn get_user(conn: &mut SqliteConnection, author: &TelegramUser) -> DieselResult<Users> {
+pub fn get_user(conn: &mut SqliteConnection, author: &TelegramUser) -> DieselResult<Users> {
     Ok(
         Users::try_from((&NewUser::from(author), conn)).unwrap_or_else(|_| {
-            block_on(NewUser::from(author).save(&mut establish_connection())).unwrap()
+            NewUser::from(author)
+                .save(&mut establish_connection())
+                .unwrap()
         }),
     )
 }
 
 /// Add new source code to user, return `SourceCode` if user can add else return string contain the error
-pub async fn create_source(
+pub fn create_source(
     conn: &mut SqliteConnection,
     source_code: &Code,
     author: &Users,
 ) -> DieselResult<SourceCode> {
-    author.new_source_code(conn, source_code).await
+    author.new_source_code(conn, source_code)
 }

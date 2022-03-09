@@ -288,7 +288,6 @@ async fn share_run_answer(
     let code: Option<String> = if output.is_ok() {
         Some(
             rpg_db::create_source(&mut rpg_db::establish_connection(), &code, author)
-                .await
                 .unwrap()
                 .code,
         )
@@ -324,8 +323,8 @@ async fn share_run_answer(
     };
     author
         .make_attempt(&mut rpg_db::establish_connection())
-        .await
-        .unwrap();
+        .log_on_error()
+        .await;
     bot.edit_message_text(
         // For text messages, the actual UTF-8 text of the message, 0-4096 characters
         // https://core.telegram.org/bots/api#message
@@ -379,7 +378,6 @@ pub async fn share_run_answer_message(
                 false,
                 &reply_message,
                 &mut rpg_db::get_user(&mut rpg_db::establish_connection(), message.from().unwrap())
-                    .await
                     .unwrap(),
                 code,
             )
@@ -421,9 +419,7 @@ pub async fn share_run_answer_cllback(
         &Command::from((&code, command)),
         true,
         &message,
-        &mut rpg_db::get_user(&mut rpg_db::establish_connection(), author)
-            .await
-            .unwrap(),
+        &mut rpg_db::get_user(&mut rpg_db::establish_connection(), author).unwrap(),
         code,
     )
     .await
@@ -605,7 +601,6 @@ async fn change_langauge(
     } else {
         author
             .update_language(&new_language, &mut rpg_db::establish_connection())
-            .await
             .log_on_error()
             .await;
         bot.edit_message_text(
@@ -669,7 +664,9 @@ pub async fn command_handler(
         // Share and Run command need reply message
         if message.reply_to_message().is_some() {
             share_run_answer_message(bot, message, command, version, mode, edition, language)
-                .await?;
+                .await
+                .log_on_error()
+                .await;
         } else {
             let ctx = languages_ctx();
             // If there is no reply message
@@ -693,9 +690,7 @@ pub async fn command_handler(
 pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
     let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
     if let Some(text) = message.text() {
-        let mut author: Users = rpg_db::get_user(conn, message.from().unwrap())
-            .await
-            .unwrap();
+        let mut author: Users = rpg_db::get_user(conn, message.from().unwrap()).unwrap();
 
         if let Some((command, args)) = parse_command(
             &text.to_ascii_lowercase(),
@@ -717,7 +712,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     if message.reply_to_message().is_some() {
                         // for run and share command should have reply message to work.
                         // make record if command are work ( if there reply message )
-                        author.make_command_record(conn).await.log_on_error().await;
+                        author.make_command_record(conn).log_on_error().await;
                     };
                     let mut code_args = get_args(args).into_iter();
                     if command == "run" {
@@ -838,7 +833,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     .log_on_error()
                     .await;
                 } else if command == "language" {
-                    author.make_command_record(conn).await.log_on_error().await;
+                    author.make_command_record(conn).log_on_error().await;
                     bot.send_message(
                         message.chat.id,
                         get_text!(ctx, &author.language, "NEW_LANGUAGE_MESSAGE")
@@ -853,7 +848,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     .log_on_error()
                     .await;
                 } else if command == "info" {
-                    author.make_command_record(conn).await.log_on_error().await;
+                    author.make_command_record(conn).log_on_error().await;
                     bot.send_message(message.chat.id, info_text(&author))
                         .reply_to_message_id(message.id)
                         .send()
@@ -897,11 +892,11 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
 
     if let Some(callback_data) = callback_query.data.clone() {
         let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
-        let mut author: Users = rpg_db::get_user(conn, &callback_query.from).await.unwrap();
+        let mut author: Users = rpg_db::get_user(conn, &callback_query.from).unwrap();
 
         if author.can_click_button(conn) {
             // Can click button
-            author.make_button_record(conn).await.log_on_error().await;
+            author.make_button_record(conn).log_on_error().await;
 
             let mut args = callback_data
                 .split_whitespace()
