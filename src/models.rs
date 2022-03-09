@@ -260,7 +260,22 @@ impl SourceCode {
 }
 
 impl Users {
-    // TODO: method to update user (Username and full name)
+    /// Update user (`username` and `telegram_fullname`)
+    pub async fn update(
+        &mut self,
+        user: &TelegramUser,
+        conn: &mut SqliteConnection,
+    ) -> DieselResult<()> {
+        if self.username != user.username {
+            self.update_username(&user.username, conn).await?;
+        }
+        if self.telegram_fullname != user.full_name() {
+            self.update_telegram_fullname(user.full_name().as_ref(), conn)
+                .await?;
+        };
+
+        Ok(())
+    }
 
     /// Add attempt to user attempts
     pub async fn make_attempt(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
@@ -305,6 +320,34 @@ impl Users {
             .set(language.eq(new_language))
             .execute(conn)?;
         self.language = new_language.into();
+        Ok(()) // The attempt make it in `share_run_answer`
+    }
+
+    /// update `telegram_fullname`
+    pub async fn update_telegram_fullname(
+        &mut self,
+        new_telegram_fullname: &str,
+        conn: &mut SqliteConnection,
+    ) -> DieselResult<()> {
+        use super::schema::users::dsl::{telegram_fullname, users};
+        update(users.find(self.id))
+            .set(telegram_fullname.eq(new_telegram_fullname))
+            .execute(conn)?;
+        self.telegram_fullname = new_telegram_fullname.into();
+        Ok(()) // The attempt make it in `share_run_answer`
+    }
+
+    /// update `username`
+    pub async fn update_username(
+        &mut self,
+        new_username: &Option<String>,
+        conn: &mut SqliteConnection,
+    ) -> DieselResult<()> {
+        use super::schema::users::dsl::{username, users};
+        update(users.find(self.id))
+            .set(username.eq(new_username))
+            .execute(conn)?;
+        self.username = new_username.clone();
         Ok(()) // The attempt make it in `share_run_answer`
     }
 
