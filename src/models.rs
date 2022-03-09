@@ -122,7 +122,7 @@ impl From<&TelegramUser> for NewUser {
         let fullname: String = format!(
             "{}{}",
             user.first_name,
-            (" ".to_owned() + &user.last_name.clone().unwrap_or(String::new())).trim()
+            (" ".to_owned() + &user.last_name.clone().unwrap_or_default()).trim()
         );
         Self::new(user.username.clone(), user.id.to_string(), fullname)
     }
@@ -253,7 +253,7 @@ impl SourceCode {
                     update_statement.set(mode.eq(new_value)).execute(conn)
                 }
             }
-            .map_err(|err| RpgError::Diesel(err))?;
+            .map_err(RpgError::Diesel)?;
             Ok(())
         } else {
             Err(RpgError::Text(format!(

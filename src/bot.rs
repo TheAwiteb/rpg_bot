@@ -96,7 +96,7 @@ impl Command {
 
 impl From<(&rpg::Code, &str)> for Command {
     fn from((code, command_name): (&rpg::Code, &str)) -> Command {
-        if command_name.to_ascii_lowercase() == String::from("run") {
+        if command_name.to_ascii_lowercase() == *"run" {
             Command::Run {
                 version: code.version.clone(),
                 mode: code.mode.clone(),
@@ -378,12 +378,9 @@ pub async fn share_run_answer_message(
                 command,
                 false,
                 &reply_message,
-                &mut rpg_db::get_user(
-                    &mut rpg_db::establish_connection(),
-                    &message.from().unwrap(),
-                )
-                .await
-                .unwrap(),
+                &mut rpg_db::get_user(&mut rpg_db::establish_connection(), message.from().unwrap())
+                    .await
+                    .unwrap(),
                 code,
             )
             .await
@@ -510,7 +507,7 @@ async fn run_share_callback(
         .log_on_error()
         .await;
     } else {
-        cannot_reached_answer(&bot, &callback_query.id, language).await;
+        cannot_reached_answer(bot, &callback_query.id, language).await;
     }
 }
 
@@ -696,7 +693,7 @@ pub async fn command_handler(
 pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
     let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
     if let Some(text) = message.text() {
-        let mut author: Users = rpg_db::get_user(conn, &message.from().unwrap())
+        let mut author: Users = rpg_db::get_user(conn, message.from().unwrap())
             .await
             .unwrap();
 
@@ -704,14 +701,13 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
             &text.to_ascii_lowercase(),
             bot_username(&bot).await.to_ascii_lowercase(),
         ) {
-            // Is command
+            let command: String = command.to_ascii_lowercase();
             if author.can_send_command(conn)
-                || (["run".into(), "share".into()].contains(&command)
-                    && message.reply_to_message().is_none())
+                || (["run", "share"].contains(&command.as_ref()) && message.reply_to_message().is_none())
             {
                 let ctx = languages_ctx();
-                let command: String = command.to_ascii_lowercase();
-                if ["run".into(), "share".into()].contains(&command) {
+
+                if ["run", "share"].contains(&command.as_ref()) {
                     if message.reply_to_message().is_some() {
                         // for run and share command should have reply message to work.
                         // make record if command are work ( if there reply message )
@@ -999,23 +995,21 @@ async fn view_handler(
 ) {
     if already_use_keyboard {
         already_use_answer(bot, &callback_query.id, language, view == "viewR").await;
-    } else {
-        if let Ok(source) = SourceCode::get_by_code(code, &mut rpg_db::establish_connection()) {
-            // unwrap here because every callback query have message 🙂
-            let message: Message = callback_query.clone().message.unwrap();
-            let keyboard: InlineKeyboardMarkup = if view == "viewR" {
-                keyboards::run_keyboard(source, language)
-            } else {
-                keyboards::share_keyboard(source, language)
-            };
-
-            bot.edit_message_reply_markup(message.chat.id, message.id)
-                .reply_markup(keyboard)
-                .send()
-                .await
-                .unwrap();
+    } else if let Ok(source) = SourceCode::get_by_code(code, &mut rpg_db::establish_connection()) {
+        // unwrap here because every callback query have message 🙂
+        let message: Message = callback_query.clone().message.unwrap();
+        let keyboard: InlineKeyboardMarkup = if view == "viewR" {
+            keyboards::run_keyboard(source, language)
         } else {
-            cannot_reached_answer(bot, &callback_query.id, language).await;
-        }
+            keyboards::share_keyboard(source, language)
+        };
+
+        bot.edit_message_reply_markup(message.chat.id, message.id)
+            .reply_markup(keyboard)
+            .send()
+            .await
+            .unwrap();
+    } else {
+        cannot_reached_answer(bot, &callback_query.id, language).await;
     }
 }
