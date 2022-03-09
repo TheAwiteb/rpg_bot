@@ -17,7 +17,7 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use crate::models::SourceCode;
-use reqwest;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error};
 
@@ -152,7 +152,7 @@ impl Default for Code {
 
 async fn get_run_response(code: &Code) -> Result<RunRes, Box<dyn Error + Send + Sync>> {
     let body = RunReq::from(code);
-    Ok(reqwest::Client::new()
+    Ok(Client::new()
         .post(RUN_URL)
         .json(&body)
         .send()
@@ -164,7 +164,7 @@ async fn get_run_response(code: &Code) -> Result<RunRes, Box<dyn Error + Send + 
 async fn get_share_response(code: &Code) -> Result<GistRes, Box<dyn Error + Send + Sync>> {
     let mut req_json = HashMap::new();
     req_json.insert("code", &code.source_code);
-    Ok(reqwest::Client::new()
+    Ok(Client::new()
         .post(GIST_GEN_URL)
         .json(&req_json)
         .send()

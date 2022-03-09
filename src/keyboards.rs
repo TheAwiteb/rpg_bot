@@ -49,25 +49,25 @@ fn option_keyboard(
 
     let mut keyboard: InlineKeyboardMarkup = InlineKeyboardMarkup::new([[
         InlineKeyboardButton::callback(
-            get_text!(ctx, language, "VERSION").unwrap().to_string() + " 📦",
+            get_text!(ctx, language, "VERSION").unwrap().to_string() + " 📦\u{200B}",
             format!(
                 "print {}",
                 get_text!(ctx, language, "VERSION_OF_CODE").unwrap()
-            ) + "_📦",
+            ) + "_📦\u{200B}",
         ),
         InlineKeyboardButton::callback(
-            get_text!(ctx, language, "MODE").unwrap().to_string() + " 🚀​",
+            get_text!(ctx, language, "MODE").unwrap().to_string() + " 🚀",
             format!(
                 "print {}",
                 get_text!(ctx, language, "MODE_OF_CODE").unwrap()
-            ) + "_🚀",
+            ) + "_🚀\u{200B}",
         ),
         InlineKeyboardButton::callback(
-            get_text!(ctx, language, "EDITION").unwrap().to_string() + " ​⚡​",
+            get_text!(ctx, language, "EDITION").unwrap().to_string() + " ⚡\u{200B}",
             format!(
                 "print {}",
                 get_text!(ctx, language, "EDITION_OF_CODE").unwrap()
-            ) + "_⚡​",
+            ) + "_⚡",
         ),
     ]]);
     let buttons: [&str; 9] = [
@@ -127,7 +127,6 @@ pub fn view_run_keyboard(
                 "print {}",
                 get_text!(ctx, language, "CANNOT_RUN_INVALID_CODE")
                     .unwrap()
-                    .to_string()
             )
         },
     )]])
@@ -151,7 +150,6 @@ pub fn view_share_keyboard(
                 "print {}",
                 get_text!(ctx, language, "CANNOT_SHARE_INVALID_CODE")
                     .unwrap()
-                    .to_string()
             )
         },
     )]])
