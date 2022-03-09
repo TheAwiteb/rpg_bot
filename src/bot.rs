@@ -19,7 +19,7 @@
 use crate::models::Users;
 use crate::{
     keyboards,
-    models::{Config, SourceCode},
+    models::{Config, NewSourceCode, SourceCode},
     rpg,
     rpg_db::{self, languages_ctx},
 };
@@ -94,8 +94,8 @@ impl Command {
     }
 }
 
-impl From<(&rpg::Code, &str)> for Command {
-    fn from((code, command_name): (&rpg::Code, &str)) -> Command {
+impl From<(&NewSourceCode, &str)> for Command {
+    fn from((code, command_name): (&NewSourceCode, &str)) -> Command {
         if command_name.to_ascii_lowercase() == *"run" {
             Command::Run {
                 version: code.version.clone(),
@@ -277,24 +277,23 @@ async fn share_run_answer(
     already_use_keyboard: bool,
     message: &Message,
     author: &mut Users,
-    code: rpg::Code,
+    code: &NewSourceCode,
     conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let output: Result<String, String> = if command.name() == "run" {
-        rpg::run(&code).await
+        rpg::run(&code.into()).await
     } else {
-        rpg::share(&code).await
+        rpg::share(&code.into()).await
     };
 
-    let code: Option<String> = if output.is_ok() {
-        Some(rpg_db::create_source(conn, &code, author).unwrap().code)
-    } else {
-        None
+    if output.is_ok() {
+        code.save(conn)?;
     };
+
     let (keyboard, output): (InlineKeyboardMarkup, String) = if command.name() == "run" {
         (
             keyboards::view_share_keyboard(
-                code,
+                code.code.clone(),
                 already_use_keyboard,
                 output.is_ok(),
                 &author.language,
@@ -307,7 +306,7 @@ async fn share_run_answer(
     } else {
         (
             keyboards::view_run_keyboard(
-                code,
+                code.code.clone(),
                 already_use_keyboard,
                 output.is_ok(),
                 &author.language,
@@ -347,7 +346,7 @@ pub async fn share_run_answer_message(
     bot: &AutoSend<Bot>,
     message: &Message,
     command: &Command,
-    language: &str,
+    author: &Users,
     conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     SourceCode::filter_source_codes(conn).unwrap();
@@ -363,16 +362,21 @@ pub async fn share_run_answer_message(
                     .log_on_error()
                     .await;
             } else {
-                let reply_message: Message =
-                    replay_wait_message(bot, message.chat.id, message.id, command, language)
-                        .await?;
+                let reply_message: Message = replay_wait_message(
+                    bot,
+                    message.chat.id,
+                    message.id,
+                    command,
+                    &author.language,
+                )
+                .await?;
                 share_run_answer(
                     bot,
                     command,
                     false,
                     &reply_message,
                     &mut rpg_db::get_user(conn, message.from().unwrap()).unwrap(),
-                    code,
+                    &NewSourceCode::new(conn, &code, author)?,
                     conn,
                 )
                 .await
@@ -384,7 +388,7 @@ pub async fn share_run_answer_message(
         let ctx = languages_ctx();
         bot.send_message(
             message.chat.id,
-            get_text!(ctx, language, "MUST_BE_TEXT")
+            get_text!(ctx, &author.language, "MUST_BE_TEXT")
                 .unwrap()
                 .to_string(),
         )
@@ -401,7 +405,7 @@ pub async fn share_run_answer_cllback(
     bot: &AutoSend<Bot>,
     chat_id: i64,
     command: &str,
-    code: rpg::Code,
+    code: NewSourceCode,
     author: &User,
     language: &str,
     conn: &mut SqliteConnection,
@@ -416,7 +420,7 @@ pub async fn share_run_answer_cllback(
         true,
         &message,
         &mut rpg_db::get_user(conn, author).unwrap(),
-        code,
+        &code,
         conn,
     )
     .await
@@ -481,9 +485,9 @@ async fn run_share_callback(
     if let Some(source_code) = get_source_code(&code, conn) {
         let message: Message = callback_query.clone().message.unwrap();
         let keyboard: InlineKeyboardMarkup = if command == "share" {
-            keyboards::view_share_keyboard(Some(code), true, true, language)
+            keyboards::view_share_keyboard(code, true, true, language)
         } else {
-            keyboards::view_run_keyboard(Some(code), true, true, language)
+            keyboards::view_run_keyboard(code, true, true, language)
         };
         try_join!(
             share_run_answer_cllback(
@@ -654,12 +658,12 @@ pub async fn command_handler(
     bot: &AutoSend<Bot>,
     message: &Message,
     command: &Command,
-    language: &str,
+    author: &Users,
     conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     // Share and Run command need reply message
     if message.reply_to_message().is_some() {
-        share_run_answer_message(bot, message, command, language, conn)
+        share_run_answer_message(bot, message, command, author, conn)
             .await
             .log_on_error()
             .await;
@@ -668,7 +672,7 @@ pub async fn command_handler(
         // If there is no reply message
         bot.send_message(
             message.chat.id,
-            get_text!(ctx, language, "REPLY_MESSAGE")
+            get_text!(ctx, &author.language, "REPLY_MESSAGE")
                 .unwrap()
                 .to_string(),
         )
@@ -720,7 +724,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                                 mode: code_args.next().unwrap(),
                                 edition: code_args.next().unwrap(),
                             },
-                            &author.language,
+                            &author,
                             conn,
                         )
                         .await
@@ -735,7 +739,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                                 mode: code_args.next().unwrap(),
                                 edition: code_args.next().unwrap(),
                             },
-                            &author.language,
+                            &author,
                             conn,
                         )
                         .await
@@ -889,6 +893,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
     // change_lang <new_language>
 
     if let Some(callback_data) = callback_query.data.clone() {
+        log::debug!("{callback_data}");
         let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
         let mut author: Users = rpg_db::get_user(conn, &callback_query.from).unwrap();
 

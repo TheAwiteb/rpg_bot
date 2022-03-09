@@ -16,10 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::{
-    models::{DieselResult, NewUser, SourceCode, Users},
-    rpg::Code,
-};
+use crate::models::{DieselResult, NewUser, Users};
 use diesel::prelude::*;
 use json_gettext::{static_json_gettext_build, JSONGetText};
 use std::env;
@@ -52,13 +49,4 @@ pub fn get_user(conn: &mut SqliteConnection, author: &TelegramUser) -> DieselRes
                 .unwrap()
         }),
     )
-}
-
-/// Add new source code to user, return `SourceCode` if user can add else return string contain the error
-pub fn create_source(
-    conn: &mut SqliteConnection,
-    source_code: &Code,
-    author: &Users,
-) -> DieselResult<SourceCode> {
-    author.new_source_code(conn, source_code)
 }

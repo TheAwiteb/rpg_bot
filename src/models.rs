@@ -123,6 +123,20 @@ impl From<&TelegramUser> for NewUser {
     }
 }
 
+impl From<SourceCode> for NewSourceCode {
+    fn from(source: SourceCode) -> Self {
+        Self {
+            user_id: source.user_id,
+            code: source.code,
+            source_code: source.source_code,
+            version: source.version,
+            mode: source.mode,
+            edition: source.edition,
+            created_at: source.created_at,
+        }
+    }
+}
+
 impl NewConfig {
     fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
         Self {
@@ -319,7 +333,7 @@ impl Users {
             .set(language.eq(new_language))
             .execute(conn)?;
         self.language = new_language.into();
-        Ok(()) // The attempt make it in `share_run_answer`
+        Ok(())
     }
 
     /// update `telegram_fullname`
@@ -333,7 +347,7 @@ impl Users {
             .set(telegram_fullname.eq(new_telegram_fullname))
             .execute(conn)?;
         self.telegram_fullname = new_telegram_fullname.into();
-        Ok(()) // The attempt make it in `share_run_answer`
+        Ok(())
     }
 
     /// update `username`
@@ -347,7 +361,7 @@ impl Users {
             .set(username.eq(new_username))
             .execute(conn)?;
         self.username = new_username.clone();
-        Ok(()) // The attempt make it in `share_run_answer`
+        Ok(())
     }
 
     /// Returns `true` if user can send command to bot
@@ -442,9 +456,11 @@ impl NewSourceCode {
 
     /// save object in database
     pub fn save(&self, conn: &mut SqliteConnection) -> DieselResult<SourceCode> {
-        diesel::insert_into(source_codes::table)
-            .values(self)
-            .execute(conn)?;
+        if !SourceCode::code_is_exist(conn, &self.code) {
+            diesel::insert_into(source_codes::table)
+                .values(self)
+                .execute(conn)?;
+        }
 
         SourceCode::try_from((self, conn))
     }
