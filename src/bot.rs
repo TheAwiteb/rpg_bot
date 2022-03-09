@@ -703,9 +703,15 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
         ) {
             let command: String = command.to_ascii_lowercase();
             if author.can_send_command(conn)
-                || (["run", "share"].contains(&command.as_ref()) && message.reply_to_message().is_none())
+                || (["run", "share"].contains(&command.as_ref())
+                    && message.reply_to_message().is_none())
             {
                 let ctx = languages_ctx();
+                author
+                    .update(message.from().unwrap(), conn)
+                    .await
+                    .log_on_error()
+                    .await;
 
                 if ["run", "share"].contains(&command.as_ref()) {
                     if message.reply_to_message().is_some() {
