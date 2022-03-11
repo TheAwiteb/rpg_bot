@@ -111,7 +111,7 @@ pub fn add_lang_keyboard(language: &str) -> InlineKeyboardMarkup {
 }
 
 pub fn view_run_keyboard(
-    code: Option<String>,
+    code: impl AsRef<str>,
     already_use_keyboard: bool,
     is_valid_source: bool,
     language: &str,
@@ -121,19 +121,18 @@ pub fn view_run_keyboard(
         get_text!(ctx, language, "RUN").unwrap().to_string() + " 🦀⚙️",
         if is_valid_source {
             // if source code is valid, the code will be valid
-            format!("viewR {} {}", code.unwrap(), already_use_keyboard)
+            format!("viewR {} {}", code.as_ref(), already_use_keyboard)
         } else {
             format!(
                 "print {}",
-                get_text!(ctx, language, "CANNOT_RUN_INVALID_CODE")
-                    .unwrap()
+                get_text!(ctx, language, "CANNOT_RUN_INVALID_CODE").unwrap()
             )
         },
     )]])
 }
 
 pub fn view_share_keyboard(
-    code: Option<String>,
+    code: impl AsRef<str>,
     already_use_keyboard: bool,
     is_valid_source: bool,
     language: &str,
@@ -144,12 +143,11 @@ pub fn view_share_keyboard(
         get_text!(ctx, language, "SHARE").unwrap().to_string() + " 🦀🔗",
         if is_valid_source {
             // if source code is valid, the code will be valid
-            format!("viewS {} {}", code.unwrap(), already_use_keyboard)
+            format!("viewS {} {}", code.as_ref(), already_use_keyboard)
         } else {
             format!(
                 "print {}",
-                get_text!(ctx, language, "CANNOT_SHARE_INVALID_CODE")
-                    .unwrap()
+                get_text!(ctx, language, "CANNOT_SHARE_INVALID_CODE").unwrap()
             )
         },
     )]])

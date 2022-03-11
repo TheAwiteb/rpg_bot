@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::models::SourceCode;
+use crate::models::NewSourceCode;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error};
@@ -60,13 +60,13 @@ pub struct Code {
     pub edition: String,
 }
 
-impl From<SourceCode> for Code {
-    fn from(source: SourceCode) -> Self {
+impl From<&NewSourceCode> for Code {
+    fn from(source: &NewSourceCode) -> Self {
         Self {
-            source_code: source.source_code,
-            version: source.version,
-            edition: source.edition,
-            mode: source.mode,
+            source_code: source.source_code.to_string(),
+            version: source.version.to_string(),
+            edition: source.edition.to_string(),
+            mode: source.mode.to_string(),
         }
     }
 }

@@ -119,12 +119,21 @@ impl TryFrom<(&NewUser, &mut SqliteConnection)> for Users {
 impl From<&TelegramUser> for NewUser {
     /// Returns new user object from telegram user
     fn from(user: &TelegramUser) -> Self {
-        let fullname: String = format!(
-            "{}{}",
-            user.first_name,
-            (" ".to_owned() + &user.last_name.clone().unwrap_or_default()).trim()
-        );
-        Self::new(user.username.clone(), user.id.to_string(), fullname)
+        Self::new(user.username.clone(), user.id.to_string(), user.full_name())
+    }
+}
+
+impl From<SourceCode> for NewSourceCode {
+    fn from(source: SourceCode) -> Self {
+        Self {
+            user_id: source.user_id,
+            code: source.code,
+            source_code: source.source_code,
+            version: source.version,
+            mode: source.mode,
+            edition: source.edition,
+            created_at: source.created_at,
+        }
     }
 }
 
@@ -265,10 +274,24 @@ impl SourceCode {
 }
 
 impl Users {
-    // TODO: method to update user (Username and full name)
+    /// Update user (`username` and `telegram_fullname`)
+    pub async fn update(
+        &mut self,
+        user: &TelegramUser,
+        conn: &mut SqliteConnection,
+    ) -> DieselResult<()> {
+        if self.username != user.username {
+            self.update_username(&user.username, conn)?;
+        }
+        if self.telegram_fullname != user.full_name() {
+            self.update_telegram_fullname(user.full_name().as_ref(), conn)?;
+        };
+
+        Ok(())
+    }
 
     /// Add attempt to user attempts
-    pub async fn make_attempt(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
+    pub fn make_attempt(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
         use super::schema::users::dsl::{attempts, telegram_id, users};
         update(users.filter(telegram_id.eq(&self.telegram_id)))
             .set(attempts.eq(self.attempts + 1))
@@ -278,7 +301,7 @@ impl Users {
     }
 
     /// update `last_command_record` (add new record)
-    pub async fn make_command_record(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
+    pub fn make_command_record(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
         use super::schema::users::dsl::{last_command_record, telegram_id, users};
         let timestamp = NaiveDateTime::from_timestamp(offset::Utc::now().timestamp(), 0);
         update(users.filter(telegram_id.eq(&self.telegram_id)))
@@ -289,7 +312,7 @@ impl Users {
     }
 
     /// update `last_button_record` (add new record)
-    pub async fn make_button_record(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
+    pub fn make_button_record(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
         use super::schema::users::dsl::{last_button_record, telegram_id, users};
         let timestamp = NaiveDateTime::from_timestamp(offset::Utc::now().timestamp(), 0);
         update(users.filter(telegram_id.eq(&self.telegram_id)))
@@ -300,7 +323,7 @@ impl Users {
     }
 
     /// update `language`
-    pub async fn update_language(
+    pub fn update_language(
         &mut self,
         new_language: &str,
         conn: &mut SqliteConnection,
@@ -310,7 +333,35 @@ impl Users {
             .set(language.eq(new_language))
             .execute(conn)?;
         self.language = new_language.into();
-        Ok(()) // The attempt make it in `share_run_answer`
+        Ok(())
+    }
+
+    /// update `telegram_fullname`
+    pub fn update_telegram_fullname(
+        &mut self,
+        new_telegram_fullname: &str,
+        conn: &mut SqliteConnection,
+    ) -> DieselResult<()> {
+        use super::schema::users::dsl::{telegram_fullname, users};
+        update(users.find(self.id))
+            .set(telegram_fullname.eq(new_telegram_fullname))
+            .execute(conn)?;
+        self.telegram_fullname = new_telegram_fullname.into();
+        Ok(())
+    }
+
+    /// update `username`
+    pub fn update_username(
+        &mut self,
+        new_username: &Option<String>,
+        conn: &mut SqliteConnection,
+    ) -> DieselResult<()> {
+        use super::schema::users::dsl::{username, users};
+        update(users.find(self.id))
+            .set(username.eq(new_username))
+            .execute(conn)?;
+        self.username = new_username.clone();
+        Ok(())
     }
 
     /// Returns `true` if user can send command to bot
@@ -340,14 +391,12 @@ impl Users {
     }
 
     /// create new source code for user
-    pub async fn new_source_code(
+    pub fn new_source_code(
         &self,
         conn: &mut SqliteConnection,
         source_code: &Code,
     ) -> DieselResult<SourceCode> {
-        NewSourceCode::new(conn, source_code, self)?
-            .save(conn)
-            .await
+        NewSourceCode::new(conn, source_code, self)?.save(conn)
     }
 
     /// Returns source codes of user
@@ -379,11 +428,11 @@ impl NewUser {
     }
 
     /// save object in database
-    pub async fn save(&self, conn: &mut SqliteConnection) -> DieselResult<Users> {
+    pub fn save(&self, conn: &mut SqliteConnection) -> DieselResult<Users> {
         diesel::insert_into(users::table)
             .values(self)
             .execute(conn)?;
-        Ok(Users::try_from((self, conn))?)
+        Users::try_from((self, conn))
     }
 }
 
@@ -406,11 +455,13 @@ impl NewSourceCode {
     }
 
     /// save object in database
-    pub async fn save(&self, conn: &mut SqliteConnection) -> DieselResult<SourceCode> {
-        diesel::insert_into(source_codes::table)
-            .values(self)
-            .execute(conn)?;
+    pub fn save(&self, conn: &mut SqliteConnection) -> DieselResult<SourceCode> {
+        if !SourceCode::code_is_exist(conn, &self.code) {
+            diesel::insert_into(source_codes::table)
+                .values(self)
+                .execute(conn)?;
+        }
 
-        Ok(SourceCode::try_from((self, conn))?)
+        SourceCode::try_from((self, conn))
     }
 }
