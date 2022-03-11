@@ -1,7 +1,7 @@
 <div align="center">
   <img width=300 src="https://rustacean.net/assets/rustacean-flat-happy.png">
   <h1>RPG_BOT (Rust Playground Bot)</h1>
-  <p><a href="https://telegram.org/">Telegram</a> bot help you to run Rust code in <a href="https://telegram.org/">Telegram</a> via <a href="https://play.rust-lang.org/">Rust playground</a></p>
+  <p><a href="https://core.telegram.org/bots/api">Telegram bot</a> help you to run Rust code in <a href="https://telegram.org/">Telegram</a> via <a href="https://play.rust-lang.org/">Rust playground</a></p>
   Languages we support it<br>
    ( AR 🇸🇦 - EN 🇺🇸 - RU 🇷🇺 )
    <br>
