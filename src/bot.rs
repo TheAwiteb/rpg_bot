@@ -34,7 +34,7 @@ use teloxide::utils::command::parse_command;
 use teloxide::{
     prelude2::*,
     requests::Requester,
-    types::{InlineKeyboardMarkup, ParseMode, User},
+    types::{ForwardedFrom, InlineKeyboardMarkup, ParseMode, User},
     utils::command::BotCommand,
     RequestError,
 };
@@ -686,6 +686,42 @@ pub async fn command_handler(
     Ok(())
 }
 
+/// Return a message containing the status of the ID, the ID of
+/// the owner of the message that was replied to, if any, is returned
+fn get_author_id(message: &Message, langauge: &str) -> String {
+    let ctx = languages_ctx();
+    if let Some(reply_message) = message.reply_to_message() {
+        let author_id_message: String = get_text!(ctx, langauge, "AUTHOR_ID_MESSAGE")
+            .unwrap()
+            .to_string();
+
+        if let Some(forward_message) = reply_message.forward() {
+            match &forward_message.from {
+                ForwardedFrom::User(from) => format!("{}: `{}`", author_id_message, from.id),
+                ForwardedFrom::Chat(from) => format!("{}: `{}`", author_id_message, from.id),
+                ForwardedFrom::SenderName(_) => {
+                    // The author of the forwarded message has privacy enabled
+                    get_text!(ctx, langauge, "INVALID_ID_ERROR")
+                        .unwrap()
+                        .to_string()
+                }
+            }
+        } else {
+            format!(
+                "{}: `{}`",
+                author_id_message,
+                reply_message.from().unwrap().id
+            )
+        }
+    } else {
+        format!(
+            "{}: `{}`",
+            get_text!(ctx, langauge, "YOUR_ID_MESSAGE").unwrap(),
+            message.from().unwrap().id
+        )
+    }
+}
+
 pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
     if let Some(text) = message.text() {
         let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
@@ -774,6 +810,18 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                             .unwrap()
                             .to_string(),
                     );
+                    vars.insert(
+                        "help_id".to_string(),
+                        get_text!(ctx, &author.language, "ID_HELP")
+                            .unwrap()
+                            .to_string(),
+                    );
+                    vars.insert(
+                        "help_info".to_string(),
+                        get_text!(ctx, &author.language, "INFO_HELP")
+                            .unwrap()
+                            .to_string(),
+                    );
 
                     bot.send_message(
                         message.chat.id,
@@ -853,6 +901,15 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     author.make_command_record(conn).log_on_error().await;
                     bot.send_message(message.chat.id, info_text(&author, conn))
                         .reply_to_message_id(message.id)
+                        .send()
+                        .await
+                        .log_on_error()
+                        .await
+                } else if command == "id" {
+                    author.make_command_record(conn).log_on_error().await;
+                    bot.send_message(message.chat.id, get_author_id(&message, &author.language))
+                        .reply_to_message_id(message.id)
+                        .parse_mode(ParseMode::MarkdownV2)
                         .send()
                         .await
                         .log_on_error()
