@@ -105,6 +105,9 @@ The bot supports 3 straightforward commands:
 - `/language` - Show a keyboard with languages that can be changed to.
 
 - `/info` - Show your information.
+
+- `/id` - Send your ID or the ID of the person you replied to.
+
 ## Features
 - Use [ORM](https://en.wikipedia.org/wiki/Object%E2%80%93relational_mapping) database with [Diesel](https://github.com/diesel-rs/diesel).
 - Delay for each user.  <!-- (You can update it from bot) -->
