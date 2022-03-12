@@ -7,5 +7,8 @@ CREATE TABLE users (
     attempts INTEGER NOT NULL DEFAULT 0,
     attempts_maximum INTEGER NOT NULL DEFAULT 100,
     last_command_record TIMESTAMP,
-    last_button_record TIMESTAMP
+    last_button_record TIMESTAMP,
+    is_admin BOOLEAN NOT NULL DEFAULT 0,
+    is_ban BOOLEAN NOT NULL DEFAULT 0,
+    ban_date TIMESTAMP
 )

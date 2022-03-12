@@ -48,9 +48,16 @@ table! {
         attempts_maximum -> Integer,
         last_command_record -> Nullable<Timestamp>,
         last_button_record -> Nullable<Timestamp>,
+        is_admin -> Bool,
+        is_ban -> Bool,
+        ban_date -> Nullable<Timestamp>,
     }
 }
 
 joinable!(source_codes -> users (user_id));
 
-allow_tables_to_appear_in_same_query!(config, source_codes, users,);
+allow_tables_to_appear_in_same_query!(
+    config,
+    source_codes,
+    users,
+);

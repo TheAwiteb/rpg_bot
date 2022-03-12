@@ -37,6 +37,9 @@ pub struct Users {
     pub attempts_maximum: i32,
     pub last_command_record: Option<NaiveDateTime>,
     pub last_button_record: Option<NaiveDateTime>,
+    pub is_admin: bool,
+    pub is_ban: bool,
+    pub ban_date: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Queryable)]
@@ -64,6 +67,7 @@ pub struct NewUser {
     pub username: Option<String>,
     pub telegram_id: String,
     pub telegram_fullname: String,
+    pub is_admin: bool,
 }
 
 #[derive(Debug, Insertable)]
@@ -415,15 +419,17 @@ impl Users {
 
 impl NewUser {
     /// Make new object, you can save it in database use save method
-    pub fn new<T: Into<String>>(
+    pub fn new(
         username: Option<String>,
-        telegram_id: T,
-        telegram_fullname: T,
+        telegram_id: impl AsRef<str>,
+        telegram_fullname: impl AsRef<str>,
     ) -> Self {
         Self {
             username,
-            telegram_id: telegram_id.into(),
-            telegram_fullname: telegram_fullname.into(),
+            telegram_id: telegram_id.as_ref().to_string(),
+            telegram_fullname: telegram_fullname.as_ref().to_string(),
+            is_admin: telegram_id.as_ref().eq(&std::env::var("super_user_id")
+                .unwrap_or_else(|_| panic!("Cannot get the super_user_id env variable"))),
         }
     }
 
