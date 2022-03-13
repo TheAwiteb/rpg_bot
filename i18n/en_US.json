@@ -1,9 +1,12 @@
 {
   "ADD_NEW_LANGUAGE": "Add another language?",
+  "ADMIN_COMMAND_ERROR": "Sorry, this command for admins only",
+  "ADMIN_MAIN_MESSAGE": "Welcome to the admin panel, from here you can control bots and members",
   "ALREADY_CURRENT_LANGUAGE": "This is already the current language",
   "ALREADY_RUN": "The source code has already run",
   "ALREADY_SHARE": "The source code has already share",
   "AUTHOR_ID_MESSAGE": "The ID of who you replied to it",
+  "BROADCAST": "Broadcast",
   "CANNOT_RUN_INVALID_CODE": "Cannot_run_invalid_source_code_🤨",
   "CANNOT_SHARE_INVALID_CODE": "Cannot_share_invalid_source_code_🤨",
   "CHANGE_LANGUAGE_SUCCESSFULLY": "The language has been successfully changed to English",
@@ -26,6 +29,7 @@
   "RUN": "Run",
   "RUN_HELP": "Reply to message with this command to run Rust code 🦀🔗\n    /run <version (default: stable)> <mode (default: debug)> <edition (default: 2021)>\nExample:\n    /run stable debug 2021",
   "RUN_MESSAGE": "The code is being executed 🦀⚙️\nVersion: {version}\nMode: {mode}\nEdition: {edition}",
+  "SETTINGS": "Settings",
   "SET_MESSAGE": "set {option_name} to {option_value}",
   "SHARE": "Share",
   "SHARE_HELP": "Reply to message with this command to share Rust code 🦀🔗\n    /share <version (default: stable)> <mode (default: debug)> <edition (default: 2021)>\nExample:\n    /share stable debug 2021",
@@ -34,6 +38,7 @@
   "SPAM_CLICK_MESSAGE": "Sorry, you have to wait {delay} seconds (in anticipation of random clicks)",
   "SPAM_COMMAND_MESSAGE": "Sorry, you have to wait {delay} seconds (in anticipation of random use of commands)",
   "START_MESSAGE": "Welcome, with @{bot_username} you can run and share rust code with <a href=\"https://play.rust-lang.org\">Rust Playground</a>\nfor help message type /help\nNote:\nYou have {attempts_maximum} attempts to use bot (Run and share).\n{command_delay} seconds between every command.\n{button_delay} seconds between every button click.",
+  "USERS": "Users",
   "VERSION": "Version",
   "VERSION_OF_CODE": "Version_of_code",
   "YOUR_ID_MESSAGE": "Your id is"
