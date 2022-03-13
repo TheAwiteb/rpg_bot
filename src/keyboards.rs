@@ -184,6 +184,7 @@ pub fn share_keyboard(source: SourceCode, language: &str) -> InlineKeyboardMarku
         format!("share {}", source.code),
     )])
 }
+
 pub fn languages_keyboard(language: &str) -> InlineKeyboardMarkup {
     let ctx = languages_ctx();
 
@@ -193,7 +194,7 @@ pub fn languages_keyboard(language: &str) -> InlineKeyboardMarkup {
             .map(|lang: &str| {
                 InlineKeyboardButton::callback(
                     format!("{}{}", if language == lang { "🌟 " } else { "" }, lang),
-                    format!("change_lang {}", lang.replace(" ", "_")),
+                    format!("change_lang {}", lang.replace(' ', "_")),
                 )
             })
             .collect::<Vec<InlineKeyboardButton>>()
@@ -201,4 +202,25 @@ pub fn languages_keyboard(language: &str) -> InlineKeyboardMarkup {
             .map(|row: &[InlineKeyboardButton]| row.to_vec()),
     )
     .append_row(add_lang_keyboard(language).inline_keyboard[0].clone())
+}
+
+pub fn admin_main_keybard(language: &str) -> InlineKeyboardMarkup {
+    let ctx = languages_ctx();
+
+    InlineKeyboardMarkup::new([
+        vec![
+            InlineKeyboardButton::callback(
+                format!("{} 👤", get_text!(ctx, language, "USERS").unwrap()),
+                "admin users".into(),
+            ),
+            InlineKeyboardButton::callback(
+                format!("{} ⚙️", get_text!(ctx, language, "SETTINGS").unwrap()),
+                "admin settings".into(),
+            ),
+        ],
+        vec![InlineKeyboardButton::callback(
+            format!("{} 🔈", get_text!(ctx, language, "BROADCAST").unwrap()),
+            "admin broadcast".into(),
+        )],
+    ])
 }
