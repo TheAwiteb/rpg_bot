@@ -584,7 +584,7 @@ async fn change_langauge(
     conn: &mut SqliteConnection,
 ) {
     let ctx = languages_ctx();
-    let new_language = new_language.replace("_", " ");
+    let new_language = new_language.replace('_', " ");
 
     // if new language same old one
     if new_language == author.language {
@@ -720,6 +720,47 @@ fn get_author_id(message: &Message, langauge: &str) -> String {
             message.from().unwrap().id
         )
     }
+}
+
+async fn admin_handler(
+    bot: AutoSend<Bot>,
+    message: Message,
+    author: Users,
+    args: impl Iterator<Item = &str>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let ctx = languages_ctx();
+    if author.is_admin {
+        if args.count() == 0 {
+            // Send admin keyboard if there no arguments
+            bot.send_message(
+                message.chat.id,
+                format!(
+                    "{} 👮‍♂️",
+                    get_text!(ctx, &author.language, "ADMIN_MAIN_MESSAGE").unwrap()
+                ),
+            )
+            .reply_to_message_id(message.id)
+            .reply_markup(keyboards::admin_main_keybard(&author.language))
+            .send()
+            .await?;
+        } else {
+            // Handel the admin command
+            todo!("users, users ban, broadcast, settings")
+        }
+    } else {
+        // If the author not admin
+        bot.send_message(
+            message.chat.id,
+            format!(
+                "{} ✖️",
+                get_text!(ctx, &author.language, "ADMIN_COMMAND_ERROR").unwrap()
+            ),
+        )
+        .reply_to_message_id(message.id)
+        .send()
+        .await?;
+    }
+    Ok(())
 }
 
 pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
@@ -914,7 +955,13 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                         .await
                         .log_on_error()
                         .await
-                };
+                } else if command == "admin" {
+                    author.make_command_record(conn).log_on_error().await;
+                    admin_handler(bot, message, author, args.into_iter())
+                        .await
+                        .log_on_error()
+                        .await;
+                }
             } else {
                 // Cannot send command
                 bot.send_message(
