@@ -653,39 +653,6 @@ pub fn info_text(author: &Users, conn: &mut SqliteConnection) -> String {
     .unwrap()
 }
 
-/// Run and Share command handler
-pub async fn command_handler(
-    bot: &AutoSend<Bot>,
-    message: &Message,
-    command: &Command,
-    author: &Users,
-    conn: &mut SqliteConnection,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    // Share and Run command need reply message
-    if message.reply_to_message().is_some() {
-        share_run_answer_message(bot, message, command, author, conn)
-            .await
-            .log_on_error()
-            .await;
-    } else {
-        let ctx = languages_ctx();
-        // If there is no reply message
-        bot.send_message(
-            message.chat.id,
-            get_text!(ctx, &author.language, "REPLY_MESSAGE")
-                .unwrap()
-                .to_string(),
-        )
-        .reply_to_message_id(message.id)
-        .send()
-        .await
-        .log_on_error()
-        .await;
-    };
-
-    Ok(())
-}
-
 /// Return a message containing the status of the ID, the ID of
 /// the owner of the message that was replied to, if any, is returned
 fn get_author_id(message: &Message, langauge: &str) -> String {
@@ -720,6 +687,39 @@ fn get_author_id(message: &Message, langauge: &str) -> String {
             message.from().unwrap().id
         )
     }
+}
+
+/// Run and Share command handler
+pub async fn command_handler(
+    bot: &AutoSend<Bot>,
+    message: &Message,
+    command: &Command,
+    author: &Users,
+    conn: &mut SqliteConnection,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    // Share and Run command need reply message
+    if message.reply_to_message().is_some() {
+        share_run_answer_message(bot, message, command, author, conn)
+            .await
+            .log_on_error()
+            .await;
+    } else {
+        let ctx = languages_ctx();
+        // If there is no reply message
+        bot.send_message(
+            message.chat.id,
+            get_text!(ctx, &author.language, "REPLY_MESSAGE")
+                .unwrap()
+                .to_string(),
+        )
+        .reply_to_message_id(message.id)
+        .send()
+        .await
+        .log_on_error()
+        .await;
+    };
+
+    Ok(())
 }
 
 async fn users_command_handler(
