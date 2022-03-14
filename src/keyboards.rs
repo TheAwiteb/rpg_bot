@@ -16,7 +16,13 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::{models::SourceCode, rpg_db::languages_ctx};
+use std::num::TryFromIntError;
+
+use crate::{
+    models::{Config, SourceCode, Users},
+    rpg_db::{self, languages_ctx},
+};
+use diesel::SqliteConnection;
 use json_gettext::get_text;
 use reqwest::Url;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
@@ -223,4 +229,125 @@ pub fn admin_main_keybard(language: &str) -> InlineKeyboardMarkup {
             "admin broadcast".into(),
         )],
     ])
+}
+
+/// Returns users interface
+pub fn admin_users_keybard(
+    conn: &mut SqliteConnection,
+    user_telegram_id: i64,
+    language: &str,
+    page_number: u32,
+) -> Result<InlineKeyboardMarkup, TryFromIntError> {
+    let ctx = languages_ctx();
+    // default value is 10
+    let users_in_page: u32 = Config::get_or_add("user_in_users_page", "10", conn)
+        .value
+        .parse::<u32>()
+        .expect("`command_delay` config should be unsigned integer");
+    let users = Users::all_users(conn).unwrap_or_default().into_iter();
+    let maximum_users_in_page: usize = ((page_number + 1) * users_in_page) as usize;
+    let users_count = users.len();
+
+    Ok(InlineKeyboardMarkup::new(
+        vec![vec![
+            InlineKeyboardButton::callback(
+                get_text!(ctx, language, "USER_INFO").unwrap().to_string() + " 👤",
+                format!(
+                    "print {}",
+                    get_text!(ctx, language, "USER_INFO_ANSWER")
+                        .unwrap()
+                        .to_string()
+                        .replace(' ', "_")
+                ) + "_👤",
+            ),
+            InlineKeyboardButton::callback(
+                get_text!(ctx, language, "BANNED").unwrap().to_string() + " 🚫",
+                format!(
+                    "print {}",
+                    get_text!(ctx, language, "BANNED_STATUS")
+                        .unwrap()
+                        .to_string()
+                        .replace(' ', "_")
+                        + "_🚫"
+                ),
+            ),
+            InlineKeyboardButton::callback(
+                get_text!(ctx, language, "ADMINISTRATIVE")
+                    .unwrap()
+                    .to_string()
+                    + " 👮‍♂️",
+                format!(
+                    "print {}",
+                    get_text!(ctx, language, "ADMIN_STATUS")
+                        .unwrap()
+                        .to_string()
+                        .replace(' ', "_")
+                ) + "_👮‍♂️",
+            ),
+        ]]
+        .into_iter()
+        .chain(
+            if users_count.ge(&maximum_users_in_page) {
+                users
+                    .enumerate()
+                    // example if page number is 2:
+                    // Take 10 users from (20 - 10) to (20)
+                    // Note: 10 is default users in one page
+                    // 20 is maximum users in two page
+                    .take_while(|(idx, _)| {
+                        idx.ge(&(maximum_users_in_page + users_in_page as usize))
+                            && idx.le(&maximum_users_in_page)
+                    })
+                    .map(|(_, user)| user)
+                    .collect::<Vec<Users>>()
+            } else if (isize::try_from(users_count)? - isize::try_from(users_in_page)?).lt(&0) {
+                users.collect()
+            } else {
+                users
+                    .enumerate()
+                    // Take last 10 users (While index >= users_count - 10)
+                    // Note: 10 is default users in one page
+                    .take_while(|(idx, _)| idx.ge(&(users_count - users_in_page as usize)))
+                    .map(|(_, user)| user)
+                    .collect()
+            }
+            .into_iter()
+            .map(|user| {
+                vec![
+                    InlineKeyboardButton::callback(
+                        user.telegram_fullname.clone(),
+                        format!("admin users info {} {}", user.telegram_id, page_number),
+                    ),
+                    InlineKeyboardButton::callback(
+                        if user.is_ban { "✔️" } else { "✖️" }.to_string(),
+                        format!("admin users ban {} {}", user.telegram_id, page_number),
+                    ),
+                    InlineKeyboardButton::callback(
+                        if user.is_admin { "✔️" } else { "✖️" }.to_string(),
+                        if user_telegram_id.eq(&(rpg_db::super_user_id() as i64)) {
+                            if user.telegram_id.ne(&user_telegram_id.to_string()) {
+                                format!("admin users admin {} {}", user.telegram_id, page_number)
+                            } else {
+                                format!(
+                                    "print {}",
+                                    get_text!(ctx, language, "CANNOT_UNADMIN_YORSELF")
+                                        .unwrap()
+                                        .to_string()
+                                        .replace(' ', "_")
+                                )
+                            }
+                        } else {
+                            format!(
+                                "print {}",
+                                get_text!(ctx, language, "SUPER_USER_COMMAND_ERROR")
+                                    .unwrap()
+                                    .to_string()
+                                    .replace(' ', "_")
+                            )
+                        },
+                    ),
+                ]
+            }),
+        ) // TODO: Add back button (Back to main admin interface)
+    ))
 }
