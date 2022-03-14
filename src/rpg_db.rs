@@ -29,6 +29,14 @@ pub fn establish_connection() -> SqliteConnection {
         .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
 }
 
+/// Returns telegram id of super user
+pub fn super_user_id() -> i32 {
+    std::env::var("super_user_id")
+        .unwrap_or_else(|_| panic!("Cannot get the super_user_id env variable"))
+        .parse()
+        .expect("Super user id should be integer")
+}
+
 /// Returns ctx of languages
 pub fn languages_ctx() -> JSONGetText<'static> {
     static_json_gettext_build!(
