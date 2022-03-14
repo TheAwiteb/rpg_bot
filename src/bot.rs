@@ -573,8 +573,8 @@ async fn update_options(
     }
 }
 
-/// Answer to change langauge request (CallbackQuery and Message)
-async fn change_langauge(
+/// Answer to change language request (CallbackQuery and Message)
+async fn change_language(
     bot: &AutoSend<Bot>,
     author: &mut Users,
     message_id: i32,
@@ -655,10 +655,10 @@ pub fn info_text(author: &Users, conn: &mut SqliteConnection) -> String {
 
 /// Return a message containing the status of the ID, the ID of
 /// the owner of the message that was replied to, if any, is returned
-fn get_author_id(message: &Message, langauge: &str) -> String {
+fn get_author_id(message: &Message, language: &str) -> String {
     let ctx = languages_ctx();
     if let Some(reply_message) = message.reply_to_message() {
-        let author_id_message: String = get_text!(ctx, langauge, "AUTHOR_ID_MESSAGE")
+        let author_id_message: String = get_text!(ctx, language, "AUTHOR_ID_MESSAGE")
             .unwrap()
             .to_string();
 
@@ -668,7 +668,7 @@ fn get_author_id(message: &Message, langauge: &str) -> String {
                 ForwardedFrom::Chat(from) => format!("{}: `{}`", author_id_message, from.id),
                 ForwardedFrom::SenderName(_) => {
                     // The author of the forwarded message has privacy enabled
-                    get_text!(ctx, langauge, "INVALID_ID_ERROR")
+                    get_text!(ctx, language, "INVALID_ID_ERROR")
                         .unwrap()
                         .to_string()
                 }
@@ -683,7 +683,7 @@ fn get_author_id(message: &Message, langauge: &str) -> String {
     } else {
         format!(
             "{}: `{}`",
-            get_text!(ctx, langauge, "YOUR_ID_MESSAGE").unwrap(),
+            get_text!(ctx, language, "YOUR_ID_MESSAGE").unwrap(),
             message.from().unwrap().id
         )
     }
@@ -810,6 +810,33 @@ async fn admin_handler(
         .await?;
     }
     Ok(())
+}
+
+fn get_keyboard(
+    conn: &mut SqliteConnection,
+    args: &mut std::vec::IntoIter<&str>,
+    author: &Users,
+) -> Option<InlineKeyboardMarkup> {
+    if let Some(interface) = args.next() {
+        if interface.eq("admin") {
+            Some(keyboards::admin_main_keybard(&author.language))
+        } else if interface.eq("users") {
+            keyboards::admin_users_keybard(
+                conn,
+                author
+                    .telegram_id
+                    .parse::<i64>()
+                    .expect("telegram_id should be integer"),
+                &author.language,
+                0,
+            )
+            .ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }
 
 pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
@@ -1044,6 +1071,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
     // share <code>
     // option <code> <option_name> <option_value>
     // change_lang <new_language>
+    // goto <interface> <args: optional>...
 
     if let Some(callback_data) = callback_query.data.clone() {
         log::debug!("{callback_data}");
@@ -1118,7 +1146,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                 }
                 "change_lang" => {
                     let message: Message = callback_query.message.unwrap();
-                    change_langauge(
+                    change_language(
                         &bot,
                         &mut author,
                         message.id,
@@ -1129,6 +1157,19 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                     )
                     .await;
                 }
+
+                "goto" => {
+                    let message: &Message = callback_query.message.as_ref().unwrap();
+                    bot.edit_message_reply_markup(message.chat.id, message.id)
+                        .reply_markup(get_keyboard(conn, &mut args, &author).unwrap_or_else(|| {
+                            panic!("back_keyboard return `None`, args: {:?}", args)
+                        }))
+                        .send()
+                        .await
+                        .log_on_error()
+                        .await;
+                }
+
                 _ => (),
             };
         } else {
@@ -1170,7 +1211,8 @@ async fn view_handler(
             .reply_markup(keyboard)
             .send()
             .await
-            .unwrap();
+            .log_on_error()
+            .await;
     } else {
         cannot_reached_answer(bot, &callback_query.id, language).await;
     }
