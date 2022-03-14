@@ -56,8 +56,4 @@ table! {
 
 joinable!(source_codes -> users (user_id));
 
-allow_tables_to_appear_in_same_query!(
-    config,
-    source_codes,
-    users,
-);
+allow_tables_to_appear_in_same_query!(config, source_codes, users,);
