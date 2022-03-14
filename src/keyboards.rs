@@ -348,6 +348,13 @@ pub fn admin_users_keybard(
                     ),
                 ]
             }),
-        ), // TODO: Add back button (Back to main admin interface)
+        )
+        .chain(
+            // Back button (To main admin interface)
+            vec![vec![InlineKeyboardButton::callback(
+                format!("{} 🔙", get_text!(ctx, language, "BACK_BUTTON").unwrap()),
+                "back admin".to_string(),
+            )]],
+        ),
     ))
 }
