@@ -722,15 +722,58 @@ fn get_author_id(message: &Message, langauge: &str) -> String {
     }
 }
 
+async fn users_command_handler(
+    bot: &AutoSend<Bot>,
+    message: &Message,
+    author: &Users,
+    args: &mut std::vec::IntoIter<&str>,
+    conn: &mut SqliteConnection,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let ctx = languages_ctx();
+    if let Some(_users_command) = args.next() {
+        todo!("users ban/unban command"); // TODO: ban/unban by id_i64/username, and reply messgae.
+                                          // Create a function returns ID and combine it with `get_author_id`?,
+                                          // check that the ID is not the ID of the requester
+    } else {
+        match keyboards::admin_users_keybard(conn, message.from().unwrap().id, &author.language, 0)
+        {
+            Ok(keyboard) => {
+                bot.send_message(
+                    message.chat.id,
+                    format!(
+                        "{} 👮‍♂️",
+                        get_text!(ctx, &author.language, "ADMIN_USERS_MESSAGE").unwrap()
+                    ),
+                )
+                .reply_to_message_id(message.id)
+                .reply_markup(keyboard)
+                .send()
+                .await?;
+            }
+            Err(err) => {
+                // This error will appear when the number of users exceeds `18446744073709551615` users. :/
+                bot.send_message(message.chat.id, err.to_string())
+                    .reply_to_message_id(message.id)
+                    .send()
+                    .await?;
+            }
+        }
+    };
+
+    Ok(())
+}
+
 async fn admin_handler(
     bot: AutoSend<Bot>,
     message: Message,
     author: Users,
-    args: impl Iterator<Item = &str>,
+    args: Vec<&str>,
+    conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let ctx = languages_ctx();
+    let mut args = args.into_iter();
     if author.is_admin {
-        if args.count() == 0 {
+        if args.len() == 0 {
             // Send admin keyboard if there no arguments
             bot.send_message(
                 message.chat.id,
@@ -745,7 +788,13 @@ async fn admin_handler(
             .await?;
         } else {
             // Handel the admin command
-            todo!("users, users ban, broadcast, settings")
+            if let Some(admin_command) = args.next() {
+                if admin_command.eq("users") {
+                    users_command_handler(&bot, &message, &author, &mut args, conn).await?;
+                } else {
+                    todo!("broadcast, settings");
+                };
+            }
         }
     } else {
         // If the author not admin
@@ -957,7 +1006,7 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                         .await
                 } else if command == "admin" {
                     author.make_command_record(conn).log_on_error().await;
-                    admin_handler(bot, message, author, args.into_iter())
+                    admin_handler(bot, message, author, args, conn)
                         .await
                         .log_on_error()
                         .await;
