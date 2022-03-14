@@ -18,6 +18,7 @@
 
 use super::{
     rpg::Code,
+    rpg_db,
     schema::{config, source_codes, users},
 };
 use chrono::{offset, NaiveDateTime};
@@ -26,7 +27,7 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use teloxide::types::User as TelegramUser;
 
-#[derive(Queryable)]
+#[derive(Queryable, Debug)]
 pub struct Users {
     pub id: i32,
     pub username: Option<String>,
@@ -278,6 +279,13 @@ impl SourceCode {
 }
 
 impl Users {
+    /// Returns all users from database
+    pub fn all_users(conn: &mut SqliteConnection) -> Option<Vec<Self>> {
+        use super::schema::users::dsl::users;
+
+        users.load::<Self>(conn).ok()
+    }
+
     /// Update user (`username` and `telegram_fullname`)
     pub async fn update(
         &mut self,
@@ -428,8 +436,9 @@ impl NewUser {
             username,
             telegram_id: telegram_id.as_ref().to_string(),
             telegram_fullname: telegram_fullname.as_ref().to_string(),
-            is_admin: telegram_id.as_ref().eq(&std::env::var("super_user_id")
-                .unwrap_or_else(|_| panic!("Cannot get the super_user_id env variable"))),
+            is_admin: telegram_id
+                .as_ref()
+                .eq(&rpg_db::super_user_id().to_string()),
         }
     }
 
