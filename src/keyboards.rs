@@ -217,16 +217,16 @@ pub fn admin_main_keybard(language: &str) -> InlineKeyboardMarkup {
         vec![
             InlineKeyboardButton::callback(
                 format!("{} 👤", get_text!(ctx, language, "USERS").unwrap()),
-                "admin users".into(),
+                "goto users".into(),
             ),
             InlineKeyboardButton::callback(
                 format!("{} ⚙️", get_text!(ctx, language, "SETTINGS").unwrap()),
-                "admin settings".into(),
+                "goto settings".into(), // TODO
             ),
         ],
         vec![InlineKeyboardButton::callback(
             format!("{} 🔈", get_text!(ctx, language, "BROADCAST").unwrap()),
-            "admin broadcast".into(),
+            "goto broadcast".into(), // TODO
         )],
     ])
 }
@@ -316,16 +316,19 @@ pub fn admin_users_keybard(
                 vec![
                     InlineKeyboardButton::callback(
                         user.telegram_fullname.clone(),
-                        format!("admin users info {} {}", user.telegram_id, page_number),
+                        // TODO
+                        format!("goto users-info {} {}", user.telegram_id, page_number),
                     ),
                     InlineKeyboardButton::callback(
                         if user.is_ban { "✔️" } else { "✖️" }.to_string(),
+                        // TODO
                         format!("admin users ban {} {}", user.telegram_id, page_number),
                     ),
                     InlineKeyboardButton::callback(
                         if user.is_admin { "✔️" } else { "✖️" }.to_string(),
                         if user_telegram_id.eq(&(rpg_db::super_user_id() as i64)) {
                             if user.telegram_id.ne(&user_telegram_id.to_string()) {
+                                // TODO
                                 format!("admin users admin {} {}", user.telegram_id, page_number)
                             } else {
                                 format!(
@@ -353,7 +356,7 @@ pub fn admin_users_keybard(
             // Back button (To main admin interface)
             vec![vec![InlineKeyboardButton::callback(
                 format!("{} 🔙", get_text!(ctx, language, "BACK_BUTTON").unwrap()),
-                "back admin".to_string(),
+                "goto admin".to_string(),
             )]],
         ),
     ))
