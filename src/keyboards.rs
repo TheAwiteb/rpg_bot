@@ -310,14 +310,14 @@ pub fn admin_users_keybard(
                         ),
                         InlineKeyboardButton::callback(
                             if user.is_ban { "✔️" } else { "✖️" }.to_string(),
-                            // TODO: Enaple to ban/unban users
+                            // TODO: Enable to ban/unban users
                             format!("admin users ban {} {}", user.telegram_id, page_number),
                         ),
                         InlineKeyboardButton::callback(
                             if user.is_admin { "✔️" } else { "✖️" }.to_string(),
                             if user_telegram_id.eq(&(rpg_db::super_user_id() as i64)) {
                                 if user.telegram_id.ne(&user_telegram_id.to_string()) {
-                                    // TODO: Enaple to admin/unadmin users
+                                    // TODO: Enable to admin/unadmin users
                                     format!(
                                         "admin users admin {} {}",
                                         user.telegram_id, page_number
