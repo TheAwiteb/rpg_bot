@@ -221,12 +221,12 @@ pub fn admin_main_keybard(language: &str) -> InlineKeyboardMarkup {
             ),
             InlineKeyboardButton::callback(
                 format!("{} ⚙️", get_text!(ctx, language, "SETTINGS").unwrap()),
-                "goto settings".into(), // TODO
+                "goto settings".into(), // TODO: Enable to update config file
             ),
         ],
         vec![InlineKeyboardButton::callback(
             format!("{} 🔈", get_text!(ctx, language, "BROADCAST").unwrap()),
-            "goto broadcast".into(), // TODO
+            "goto broadcast".into(), // TODO: Enable to brodcasts messages
         )],
     ])
 }
@@ -306,19 +306,18 @@ pub fn admin_users_keybard(
                     vec![
                         InlineKeyboardButton::callback(
                             user.telegram_fullname.clone(),
-                            // TODO
                             format!("goto users-info {} {}", user.telegram_id, page_number),
                         ),
                         InlineKeyboardButton::callback(
                             if user.is_ban { "✔️" } else { "✖️" }.to_string(),
-                            // TODO
+                            // TODO: Enaple to ban/unban users
                             format!("admin users ban {} {}", user.telegram_id, page_number),
                         ),
                         InlineKeyboardButton::callback(
                             if user.is_admin { "✔️" } else { "✖️" }.to_string(),
                             if user_telegram_id.eq(&(rpg_db::super_user_id() as i64)) {
                                 if user.telegram_id.ne(&user_telegram_id.to_string()) {
-                                    // TODO
+                                    // TODO: Enaple to admin/unadmin users
                                     format!(
                                         "admin users admin {} {}",
                                         user.telegram_id, page_number
@@ -389,4 +388,13 @@ pub fn admin_users_keybard(
         let keyboard = keyboard.append_to_row(999, back_button);
         Ok(keyboard)
     }
+}
+
+pub fn admin_users_info_keybard(users_page_number: &str, language: &str) -> InlineKeyboardMarkup {
+    let ctx = languages_ctx();
+
+    InlineKeyboardMarkup::new([[InlineKeyboardButton::callback(
+        format!("🔙 {}", get_text!(ctx, language, "BACK_BUTTON").unwrap()),
+        format!("goto users {}", users_page_number),
+    )]])
 }

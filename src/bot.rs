@@ -620,9 +620,34 @@ async fn change_language(
     }
 }
 
-pub fn info_text(author: &Users, conn: &mut SqliteConnection) -> String {
+/// Returns information about `author` with `language` language
+pub fn info_text(author: &Users, language: &str, conn: &mut SqliteConnection) -> String {
     let ctx = languages_ctx();
     let mut vars: HashMap<String, String> = HashMap::new();
+    vars.insert(
+        "username".into(),
+        match &author.username {
+            Some(username) => format!("@{}", username),
+            None => get_text!(ctx, language, "NOT_FOUND").unwrap().to_string(),
+        },
+    );
+    vars.insert("telegram_id".into(), author.telegram_id.clone());
+    vars.insert("lang".into(), author.language.clone());
+    vars.insert(
+        "admin".into(),
+        if author.is_admin { "✔️" } else { "✖️" }.to_string(),
+    );
+    vars.insert(
+        "ban".into(),
+        if author.is_ban { "✔️" } else { "✖️" }.to_string(),
+    );
+    vars.insert(
+        "ban_date".into(),
+        match author.ban_date {
+            Some(date) => date.to_string(),
+            None => get_text!(ctx, language, "NOT_FOUND").unwrap().to_string(),
+        },
+    );
     vars.insert("full_name".into(), author.telegram_fullname.clone());
     vars.insert(
         "command_delay".into(),
@@ -645,7 +670,7 @@ pub fn info_text(author: &Users, conn: &mut SqliteConnection) -> String {
     );
 
     strfmt(
-        &get_text!(ctx, &author.language, "INFO_MESSAGE")
+        &get_text!(ctx, language, "INFO_MESSAGE")
             .unwrap()
             .to_string(),
         &vars,
@@ -731,9 +756,9 @@ async fn users_command_handler(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let ctx = languages_ctx();
     if let Some(_users_command) = args.next() {
-        todo!("users ban/unban admin command"); // TODO: ban/unban by id_i64/username, and reply messgae.
-                                          // Create a function returns ID and combine it with `get_author_id`?,
-                                          // check that the ID is not the ID of the requester
+        todo!("users ban/unban admin commands"); // TODO: ban/unban by id_i64/username, and reply messgae.
+                                                // Create a function returns ID and combine it with `get_author_id`?,
+                                                // check that the ID is not the ID of the requester
     } else {
         match keyboards::admin_users_keybard(conn, message.from().unwrap().id, &author.language, 0)
         {
@@ -812,16 +837,45 @@ async fn admin_handler(
     Ok(())
 }
 
+fn get_meesgae_text(
+    conn: &mut SqliteConnection,
+    args: std::vec::IntoIter<&str>,
+    author: &Users,
+) -> Option<String> {
+    let mut args = args;
+    if let Some(command) = args.next() {
+        let ctx = languages_ctx();
+        match command {
+            "admin" => Some(format!(
+                "{} 👮‍♂️",
+                get_text!(ctx, &author.language, "ADMIN_MAIN_MESSAGE").unwrap()
+            )),
+            "users" => Some(format!(
+                "{} 👮‍♂️",
+                get_text!(ctx, &author.language, "ADMIN_USERS_MESSAGE").unwrap()
+            )),
+            "users-info" => Some(info_text(
+                &Users::get_by_telegram_id(conn, args.next()?.into())?,
+                &author.language,
+                conn,
+            )),
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
 fn get_keyboard(
     conn: &mut SqliteConnection,
-    args: &mut std::vec::IntoIter<&str>,
+    args: std::vec::IntoIter<&str>,
     author: &Users,
 ) -> Option<InlineKeyboardMarkup> {
+    let mut args = args;
     if let Some(interface) = args.next() {
-        if interface.eq("admin") {
-            Some(keyboards::admin_main_keybard(&author.language))
-        } else if interface.eq("users") {
-            keyboards::admin_users_keybard(
+        match interface {
+            "admin" => Some(keyboards::admin_main_keybard(&author.language)),
+            "users" => keyboards::admin_users_keybard(
                 conn,
                 author
                     .telegram_id
@@ -833,9 +887,12 @@ fn get_keyboard(
                     .parse::<u32>()
                     .expect("page number should be unsigned integer"),
             )
-            .ok()
-        } else {
-            None
+            .ok(),
+            "users-info" => Some(keyboards::admin_users_info_keybard(
+                args.nth(1).unwrap_or("0"),
+                &author.language,
+            )),
+            _ => None,
         }
     } else {
         None
@@ -1019,7 +1076,8 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     .await;
                 } else if command == "info" {
                     author.make_command_record(conn).log_on_error().await;
-                    bot.send_message(message.chat.id, info_text(&author, conn))
+                    // TODO: Enable to get info of reply messages
+                    bot.send_message(message.chat.id, info_text(&author, &author.language, conn))
                         .reply_to_message_id(message.id)
                         .send()
                         .await
@@ -1075,6 +1133,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
     // option <code> <option_name> <option_value>
     // change_lang <new_language>
     // gotok <interface> <args: optional>...
+    // goto <interface> <args: optional>...
 
     if let Some(callback_data) = callback_query.data.clone() {
         log::debug!("{callback_data}");
@@ -1164,13 +1223,33 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                 "gotok" => {
                     let message: &Message = callback_query.message.as_ref().unwrap();
                     bot.edit_message_reply_markup(message.chat.id, message.id)
-                        .reply_markup(get_keyboard(conn, &mut args, &author).unwrap_or_else(|| {
-                            panic!("back_keyboard return `None`, args: {:?}", args)
-                        }))
+                        .reply_markup(get_keyboard(conn, args.clone(), &author).unwrap_or_else(
+                            || panic!("back_keyboard return `None`, args: {:?}", args),
+                        ))
                         .send()
                         .await
                         .log_on_error()
                         .await;
+                }
+                // TODO: DRY with gotok and goto
+                "goto" => {
+                    let message: &Message = callback_query.message.as_ref().unwrap();
+                    bot.edit_message_text(
+                        message.chat.id,
+                        message.id,
+                        get_meesgae_text(conn, args.clone(), &author).unwrap_or_else(|| {
+                            panic!("get_meesgae_text return `None`, args: {:?}", args)
+                        }),
+                    )
+                    .reply_markup(
+                        get_keyboard(conn, args.clone(), &author).unwrap_or_else(|| {
+                            panic!("back_keyboard return `None`, args: {:?}", args)
+                        }),
+                    )
+                    .send()
+                    .await
+                    .log_on_error()
+                    .await;
                 }
 
                 _ => (),
