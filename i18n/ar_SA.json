@@ -34,6 +34,7 @@
   "NEXT_BUTTON": "التالي",
   "NOT_FOUND": "لايوجد",
   "PREVIOUS_BUTTON": "السابق",
+  "REPLY_FOR_ADMIN_ONLY": "عذرا، اسخدام هذه الأمر بالرد على رسالة اخرى هو خاص للمشرفين فقط",
   "REPLY_MESSAGE": "استخدم هذا الأمر في الرد على رسالة أخرى!",
   "REPOSITORY": "المستودع",
   "RUN": "تشغيل",
@@ -52,6 +53,7 @@
   "USERS": "المستخدمين",
   "USER_INFO": "المستخدم",
   "USER_INFO_ANSWER": "معلومات حول المستخدم",
+  "USER_NOT_FOUND": "عذرا هذه المستخدم غير موجود",
   "VERSION": "الاصدار",
   "VERSION_OF_CODE": "اصدار_الكود",
   "YOUR_ID_MESSAGE": "المعرف الخاص بك هو"

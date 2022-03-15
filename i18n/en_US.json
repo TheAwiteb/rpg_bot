@@ -34,6 +34,7 @@
   "NEXT_BUTTON": "Next",
   "NOT_FOUND": "No found",
   "PREVIOUS_BUTTON": "Previous",
+  "REPLY_FOR_ADMIN_ONLY": "Sorry, using this command to reply to another message is for admins only",
   "REPLY_MESSAGE": "Use this command in a reply to another message!",
   "REPOSITORY": "Repository",
   "RUN": "Run",
@@ -52,6 +53,7 @@
   "USERS": "Users",
   "USER_INFO": "User",
   "USER_INFO_ANSWER": "Information about the user",
+  "USER_NOT_FOUND": "Sorry, this user does not exist",
   "VERSION": "Version",
   "VERSION_OF_CODE": "Version_of_code",
   "YOUR_ID_MESSAGE": "Your id is"
