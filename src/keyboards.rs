@@ -355,7 +355,7 @@ pub fn admin_users_keybard(
         let previous_button = InlineKeyboardButton::callback(
             format!("⏮️ {}", get_text!(ctx, language, "PREVIOUS_BUTTON").unwrap()),
             format!(
-                "goto users {}",
+                "gotok users {}",
                 if page_number.ne(&0) {
                     page_number - 1
                 } else {
@@ -365,7 +365,7 @@ pub fn admin_users_keybard(
         );
         let next_button = InlineKeyboardButton::callback(
             format!("{} ⏭️", get_text!(ctx, language, "NEXT_BUTTON").unwrap()),
-            format!("goto users {}", page_number + 1),
+            format!("gotok users {}", page_number + 1),
         );
 
         let next_back_keyboard = InlineKeyboardMarkup::new(vec![if have_next && have_previous {
