@@ -731,7 +731,7 @@ async fn users_command_handler(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let ctx = languages_ctx();
     if let Some(_users_command) = args.next() {
-        todo!("users ban/unban command"); // TODO: ban/unban by id_i64/username, and reply messgae.
+        todo!("users ban/unban admin command"); // TODO: ban/unban by id_i64/username, and reply messgae.
                                           // Create a function returns ID and combine it with `get_author_id`?,
                                           // check that the ID is not the ID of the requester
     } else {
@@ -828,7 +828,10 @@ fn get_keyboard(
                     .parse::<i64>()
                     .expect("telegram_id should be integer"),
                 &author.language,
-                0,
+                args.next()
+                    .unwrap_or("0")
+                    .parse::<u32>()
+                    .expect("page number should be unsigned integer"),
             )
             .ok()
         } else {
