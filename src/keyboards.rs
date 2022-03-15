@@ -246,9 +246,12 @@ pub fn admin_users_keybard(
         .expect("`command_delay` config should be unsigned integer");
     let users = Users::all_users(conn).unwrap_or_default().into_iter();
     let maximum_users_in_page: usize = ((page_number + 1) * users_in_page) as usize;
-    let users_count = users.len();
+    let maximum_users_in_previous_page: usize = ((page_number) * users_in_page) as usize;
+    let users_count: usize = users.as_slice().iter().count();
+    let have_next: bool = users_count.gt(&maximum_users_in_page);
+    let have_previous: bool = (maximum_users_in_page - usize::try_from(users_in_page)?).gt(&0);
 
-    Ok(InlineKeyboardMarkup::new(
+    let keyboard: InlineKeyboardMarkup = InlineKeyboardMarkup::new(
         vec![vec![
             InlineKeyboardButton::callback(
                 get_text!(ctx, language, "USER_INFO").unwrap().to_string() + " 👤",
@@ -258,7 +261,7 @@ pub fn admin_users_keybard(
                         .unwrap()
                         .to_string()
                         .replace(' ', "_")
-                ) + "_👤",
+                ),
             ),
             InlineKeyboardButton::callback(
                 get_text!(ctx, language, "BANNED").unwrap().to_string() + " 🚫",
@@ -268,7 +271,6 @@ pub fn admin_users_keybard(
                         .unwrap()
                         .to_string()
                         .replace(' ', "_")
-                        + "_🚫"
                 ),
             ),
             InlineKeyboardButton::callback(
@@ -282,82 +284,109 @@ pub fn admin_users_keybard(
                         .unwrap()
                         .to_string()
                         .replace(' ', "_")
-                ) + "_👮‍♂️",
+                ),
             ),
         ]]
         .into_iter()
         .chain(
-            if users_count.ge(&maximum_users_in_page) {
-                users
-                    .enumerate()
-                    // example if page number is 2:
-                    // Take 10 users from (20 - 10) to (20)
-                    // Note: 10 is default users in one page
-                    // 20 is maximum users in two page
-                    .take_while(|(idx, _)| {
-                        idx.ge(&(maximum_users_in_page + users_in_page as usize))
-                            && idx.le(&maximum_users_in_page)
-                    })
-                    .map(|(_, user)| user)
-                    .collect::<Vec<Users>>()
-            } else if (isize::try_from(users_count)? - isize::try_from(users_in_page)?).lt(&0) {
-                users.collect()
-            } else {
-                users
-                    .enumerate()
-                    // Take last 10 users (While index >= users_count - 10)
-                    // Note: 10 is default users in one page
-                    .take_while(|(idx, _)| idx.ge(&(users_count - users_in_page as usize)))
-                    .map(|(_, user)| user)
-                    .collect()
-            }
-            .into_iter()
-            .map(|user| {
-                vec![
-                    InlineKeyboardButton::callback(
-                        user.telegram_fullname.clone(),
-                        // TODO
-                        format!("goto users-info {} {}", user.telegram_id, page_number),
-                    ),
-                    InlineKeyboardButton::callback(
-                        if user.is_ban { "✔️" } else { "✖️" }.to_string(),
-                        // TODO
-                        format!("admin users ban {} {}", user.telegram_id, page_number),
-                    ),
-                    InlineKeyboardButton::callback(
-                        if user.is_admin { "✔️" } else { "✖️" }.to_string(),
-                        if user_telegram_id.eq(&(rpg_db::super_user_id() as i64)) {
-                            if user.telegram_id.ne(&user_telegram_id.to_string()) {
-                                // TODO
-                                format!("admin users admin {} {}", user.telegram_id, page_number)
+            users
+                .enumerate()
+                // example if page number is 2:
+                // Take 10 users from (20 - 10) to (20)
+                // Note: 10 is default users in one page
+                // 20 is maximum users in two page
+                .filter_map(|(idx, user)| {
+                    if idx.ge(&maximum_users_in_previous_page) && idx.lt(&maximum_users_in_page) {
+                        Some(user)
+                    } else {
+                        None
+                    }
+                })
+                .map(|user| {
+                    vec![
+                        InlineKeyboardButton::callback(
+                            user.telegram_fullname.clone(),
+                            // TODO
+                            format!("goto users-info {} {}", user.telegram_id, page_number),
+                        ),
+                        InlineKeyboardButton::callback(
+                            if user.is_ban { "✔️" } else { "✖️" }.to_string(),
+                            // TODO
+                            format!("admin users ban {} {}", user.telegram_id, page_number),
+                        ),
+                        InlineKeyboardButton::callback(
+                            if user.is_admin { "✔️" } else { "✖️" }.to_string(),
+                            if user_telegram_id.eq(&(rpg_db::super_user_id() as i64)) {
+                                if user.telegram_id.ne(&user_telegram_id.to_string()) {
+                                    // TODO
+                                    format!(
+                                        "admin users admin {} {}",
+                                        user.telegram_id, page_number
+                                    )
+                                } else {
+                                    format!(
+                                        "print {}",
+                                        get_text!(ctx, language, "CANNOT_UNADMIN_YORSELF")
+                                            .unwrap()
+                                            .to_string()
+                                            .replace(' ', "_")
+                                    )
+                                }
                             } else {
                                 format!(
                                     "print {}",
-                                    get_text!(ctx, language, "CANNOT_UNADMIN_YORSELF")
+                                    get_text!(ctx, language, "SUPER_USER_COMMAND_ERROR")
                                         .unwrap()
                                         .to_string()
                                         .replace(' ', "_")
                                 )
-                            }
-                        } else {
-                            format!(
-                                "print {}",
-                                get_text!(ctx, language, "SUPER_USER_COMMAND_ERROR")
-                                    .unwrap()
-                                    .to_string()
-                                    .replace(' ', "_")
-                            )
-                        },
-                    ),
-                ]
-            }),
-        )
-        .chain(
-            // Back button (To main admin interface)
-            vec![vec![InlineKeyboardButton::callback(
-                format!("{} 🔙", get_text!(ctx, language, "BACK_BUTTON").unwrap()),
-                "goto admin".to_string(),
-            )]],
+                            },
+                        ),
+                    ]
+                }),
         ),
-    ))
+    );
+    // Back button (To main admin interface)
+    let back_button: InlineKeyboardButton = InlineKeyboardButton::callback(
+        format!("🔙 {}", get_text!(ctx, language, "BACK_BUTTON").unwrap()),
+        "goto admin".to_string(),
+    );
+    if have_previous || have_next {
+        let previous_button = InlineKeyboardButton::callback(
+            format!("⏮️ {}", get_text!(ctx, language, "PREVIOUS_BUTTON").unwrap()),
+            format!(
+                "goto users {}",
+                if page_number.ne(&0) {
+                    page_number - 1
+                } else {
+                    page_number
+                }
+            ),
+        );
+        let next_button = InlineKeyboardButton::callback(
+            format!("{} ⏭️", get_text!(ctx, language, "NEXT_BUTTON").unwrap()),
+            format!("goto users {}", page_number + 1),
+        );
+
+        let next_back_keyboard = InlineKeyboardMarkup::new(vec![if have_next && have_previous {
+            vec![previous_button, next_button]
+        } else if have_next {
+            vec![next_button]
+        } else {
+            vec![previous_button]
+        }]);
+
+        let next_back_keyboard = next_back_keyboard.append_to_row(1, back_button);
+
+        Ok(InlineKeyboardMarkup::new(
+            keyboard
+                .inline_keyboard
+                .into_iter()
+                .chain(next_back_keyboard.inline_keyboard.into_iter()),
+        ))
+    } else {
+        // 999 is random number
+        let keyboard = keyboard.append_to_row(999, back_button);
+        Ok(keyboard)
+    }
 }
