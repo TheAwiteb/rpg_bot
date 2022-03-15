@@ -31,6 +31,8 @@
   "MODE_OF_CODE": "Mode_of_code",
   "MUST_BE_TEXT": "The source code must be text ❗",
   "NEW_LANGUAGE_MESSAGE": "Hi, the current language is English. If you want to change it, choose the language you want from below",
+  "NEXT_BUTTON": "Next",
+  "PREVIOUS_BUTTON": "Previous",
   "REPLY_MESSAGE": "Use this command in a reply to another message!",
   "REPOSITORY": "Repository",
   "RUN": "Run",
