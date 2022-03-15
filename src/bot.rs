@@ -678,6 +678,32 @@ pub fn info_text(author: &Users, language: &str, conn: &mut SqliteConnection) ->
     .unwrap()
 }
 
+/// Return info from message object, use `get_author_id`
+fn info_text_by_message(conn: &mut SqliteConnection, message: &Message, author: &Users) -> String {
+    let ctx = languages_ctx();
+    if let Some(user_id) = get_author_id(message) {
+        if user_id.eq(&message.from().unwrap().id) {
+            info_text(author, &author.language, conn)
+        } else if author.is_admin {
+            if let Some(user) = Users::get_by_telegram_id(conn, user_id.to_string()) {
+                info_text(&user, &author.language, conn)
+            } else {
+                get_text!(ctx, &author.language, "USER_NOT_FOUND")
+                    .unwrap()
+                    .to_string()
+            }
+        } else {
+            get_text!(ctx, &author.language, "REPLY_FOR_ADMIN_ONLY")
+                .unwrap()
+                .to_string()
+        }
+    } else {
+        get_text!(ctx, &author.language, "INVALID_ID_ERROR")
+            .unwrap()
+            .to_string()
+    }
+}
+
 /// Return the ID of sender or owner of the message that was replied to, if any, is returned
 /// retrn `None` if author of forward message is anonymous
 fn get_author_id(message: &Message) -> Option<i64> {
@@ -864,6 +890,8 @@ fn get_meesgae_text(
                 "{} 👮‍♂️",
                 get_text!(ctx, &author.language, "ADMIN_USERS_MESSAGE").unwrap()
             )),
+            // FIXME: Will panic if user dose not exist, use `USER_NOT_FOUND` message
+            // hint use if let
             "users-info" => Some(info_text(
                 &Users::get_by_telegram_id(conn, args.next()?.into())?,
                 &author.language,
@@ -1086,13 +1114,15 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     .await;
                 } else if command == "info" {
                     author.make_command_record(conn).log_on_error().await;
-                    // TODO: Enable to get info of reply messages
-                    bot.send_message(message.chat.id, info_text(&author, &author.language, conn))
-                        .reply_to_message_id(message.id)
-                        .send()
-                        .await
-                        .log_on_error()
-                        .await
+                    bot.send_message(
+                        message.chat.id,
+                        info_text_by_message(conn, &message, &author),
+                    )
+                    .reply_to_message_id(message.id)
+                    .send()
+                    .await
+                    .log_on_error()
+                    .await
                 } else if command == "id" {
                     author.make_command_record(conn).log_on_error().await;
                     bot.send_message(
