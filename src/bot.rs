@@ -678,39 +678,49 @@ pub fn info_text(author: &Users, language: &str, conn: &mut SqliteConnection) ->
     .unwrap()
 }
 
-/// Return a message containing the status of the ID, the ID of
-/// the owner of the message that was replied to, if any, is returned
-fn get_author_id(message: &Message, language: &str) -> String {
-    let ctx = languages_ctx();
+/// Return the ID of sender or owner of the message that was replied to, if any, is returned
+/// retrn `None` if author of forward message is anonymous
+fn get_author_id(message: &Message) -> Option<i64> {
     if let Some(reply_message) = message.reply_to_message() {
-        let author_id_message: String = get_text!(ctx, language, "AUTHOR_ID_MESSAGE")
-            .unwrap()
-            .to_string();
-
         if let Some(forward_message) = reply_message.forward() {
             match &forward_message.from {
-                ForwardedFrom::User(from) => format!("{}: `{}`", author_id_message, from.id),
-                ForwardedFrom::Chat(from) => format!("{}: `{}`", author_id_message, from.id),
+                ForwardedFrom::User(from) => Some(from.id),
+                ForwardedFrom::Chat(from) => Some(from.id),
                 ForwardedFrom::SenderName(_) => {
                     // The author of the forwarded message has privacy enabled
-                    get_text!(ctx, language, "INVALID_ID_ERROR")
-                        .unwrap()
-                        .to_string()
+                    None
                 }
             }
         } else {
+            Some(reply_message.from().unwrap().id)
+        }
+    } else {
+        Some(message.from().unwrap().id)
+    }
+}
+
+/// Return a message containing the status of the ID, the ID of
+/// the owner of the message that was replied to, if any, is returned
+fn get_author_id_message(message: &Message, language: &str) -> String {
+    let ctx = languages_ctx();
+    if let Some(user_id) = get_author_id(message) {
+        if user_id.eq(&message.from().unwrap().id) {
             format!(
                 "{}: `{}`",
-                author_id_message,
-                reply_message.from().unwrap().id
+                get_text!(ctx, language, "YOUR_ID_MESSAGE").unwrap(),
+                user_id
+            )
+        } else {
+            format!(
+                "{}: `{}`",
+                get_text!(ctx, language, "AUTHOR_ID_MESSAGE").unwrap(),
+                user_id
             )
         }
     } else {
-        format!(
-            "{}: `{}`",
-            get_text!(ctx, language, "YOUR_ID_MESSAGE").unwrap(),
-            message.from().unwrap().id
-        )
+        get_text!(ctx, language, "INVALID_ID_ERROR")
+            .unwrap()
+            .to_string()
     }
 }
 
@@ -757,8 +767,8 @@ async fn users_command_handler(
     let ctx = languages_ctx();
     if let Some(_users_command) = args.next() {
         todo!("users ban/unban admin commands"); // TODO: ban/unban by id_i64/username, and reply messgae.
-                                                // Create a function returns ID and combine it with `get_author_id`?,
-                                                // check that the ID is not the ID of the requester
+                                                 // Create a function returns ID and combine it with `get_author_id`?,
+                                                 // check that the ID is not the ID of the requester
     } else {
         match keyboards::admin_users_keybard(conn, message.from().unwrap().id, &author.language, 0)
         {
@@ -1085,13 +1095,16 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                         .await
                 } else if command == "id" {
                     author.make_command_record(conn).log_on_error().await;
-                    bot.send_message(message.chat.id, get_author_id(&message, &author.language))
-                        .reply_to_message_id(message.id)
-                        .parse_mode(ParseMode::MarkdownV2)
-                        .send()
-                        .await
-                        .log_on_error()
-                        .await
+                    bot.send_message(
+                        message.chat.id,
+                        get_author_id_message(&message, &author.language),
+                    )
+                    .reply_to_message_id(message.id)
+                    .parse_mode(ParseMode::MarkdownV2)
+                    .send()
+                    .await
+                    .log_on_error()
+                    .await
                 } else if command == "admin" {
                     author.make_command_record(conn).log_on_error().await;
                     admin_handler(bot, message, author, args, conn)
