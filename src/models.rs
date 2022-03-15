@@ -286,6 +286,16 @@ impl Users {
         users.load::<Self>(conn).ok()
     }
 
+    /// Returns user by telegram id if is found
+    pub fn get_by_telegram_id(conn: &mut SqliteConnection, telegram_id: String) -> Option<Self> {
+        use super::schema::users::dsl::{telegram_id as telegram_id_query, users};
+
+        users
+            .filter(telegram_id_query.eq(telegram_id))
+            .first::<Self>(conn)
+            .ok()
+    }
+
     /// Update user (`username` and `telegram_fullname`)
     pub async fn update(
         &mut self,
