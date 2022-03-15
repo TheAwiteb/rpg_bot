@@ -1074,7 +1074,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
     // share <code>
     // option <code> <option_name> <option_value>
     // change_lang <new_language>
-    // goto <interface> <args: optional>...
+    // gotok <interface> <args: optional>...
 
     if let Some(callback_data) = callback_query.data.clone() {
         log::debug!("{callback_data}");
@@ -1161,7 +1161,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                     .await;
                 }
 
-                "goto" => {
+                "gotok" => {
                     let message: &Message = callback_query.message.as_ref().unwrap();
                     bot.edit_message_reply_markup(message.chat.id, message.id)
                         .reply_markup(get_keyboard(conn, &mut args, &author).unwrap_or_else(|| {
