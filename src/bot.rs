@@ -401,7 +401,7 @@ pub async fn share_run_answer_message(
     Ok(())
 }
 
-pub async fn share_run_answer_cllback(
+pub async fn share_run_answer_callback(
     bot: &AutoSend<Bot>,
     chat_id: i64,
     command: &str,
@@ -490,7 +490,7 @@ async fn run_share_callback(
             keyboards::view_run_keyboard(code, true, true, language)
         };
         try_join!(
-            share_run_answer_cllback(
+            share_run_answer_callback(
                 bot,
                 message.chat.id,
                 command,
@@ -532,7 +532,7 @@ async fn update_options(
         vars.insert("option_value".into(), option_value.to_string());
 
         let message: Message = callback_query.clone().message.unwrap();
-        let old_keybord: &InlineKeyboardMarkup = message.reply_markup().unwrap();
+        let old_keyboard: &InlineKeyboardMarkup = message.reply_markup().unwrap();
         let answer = bot
             .answer_callback_query(&callback_query.id)
             .text(
@@ -550,13 +550,13 @@ async fn update_options(
             .await;
 
         let keyboard: InlineKeyboardMarkup =
-            if old_keybord.inline_keyboard[4][0].text.contains("Run") {
+            if old_keyboard.inline_keyboard[4][0].text.contains("Run") {
                 keyboards::run_keyboard(source, language)
             } else {
                 keyboards::share_keyboard(source, language)
             };
 
-        if &keyboard != old_keybord {
+        if &keyboard != old_keyboard {
             try_join!(
                 answer,
                 bot.edit_message_reply_markup(message.chat.id, message.id)
@@ -705,7 +705,7 @@ fn info_text_by_message(conn: &mut SqliteConnection, message: &Message, author: 
 }
 
 /// Return the ID of sender or owner of the message that was replied to, if any, is returned
-/// retrn `None` if author of forward message is anonymous
+/// return `None` if author of forward message is anonymous
 fn get_author_id(message: &Message) -> Option<i64> {
     if let Some(reply_message) = message.reply_to_message() {
         if let Some(forward_message) = reply_message.forward() {
@@ -792,7 +792,7 @@ async fn users_command_handler(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let ctx = languages_ctx();
     if let Some(_users_command) = args.next() {
-        todo!("users ban/unban admin commands"); // TODO: ban/unban by id_i64/username, and reply messgae.
+        todo!("users ban/unban admin commands"); // TODO: ban/unban by id_i64/username, and reply message.
                                                  // Create a function returns ID and combine it with `get_author_id`?,
                                                  // check that the ID is not the ID of the requester
     } else {
@@ -873,7 +873,7 @@ async fn admin_handler(
     Ok(())
 }
 
-fn get_meesgae_text(
+fn get_message_text(
     conn: &mut SqliteConnection,
     args: std::vec::IntoIter<&str>,
     author: &Users,
@@ -1280,8 +1280,8 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                     bot.edit_message_text(
                         message.chat.id,
                         message.id,
-                        get_meesgae_text(conn, args.clone(), &author).unwrap_or_else(|| {
-                            panic!("get_meesgae_text return `None`, args: {:?}", args)
+                        get_message_text(conn, args.clone(), &author).unwrap_or_else(|| {
+                            panic!("get_message_text return `None`, args: {:?}", args)
                         }),
                     )
                     .reply_markup(
