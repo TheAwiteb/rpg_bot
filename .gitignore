@@ -1,2 +1,4 @@
 /target
 Cargo.lock
+/.idea/
+/rpg_bot.sqlite3
