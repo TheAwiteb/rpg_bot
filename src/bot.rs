@@ -823,6 +823,39 @@ fn get_author_id_message(message: &Message, language: &str) -> String {
     }
 }
 
+async fn users_ban_answer(
+    bot: &AutoSend<Bot>,
+    args: &mut std::vec::IntoIter<&str>,
+    author: &Users,
+    message_id: i32,
+    chat_id: i64,
+    query_id: &str,
+    conn: &mut SqliteConnection,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    try_join!(
+        bot.answer_callback_query(query_id)
+            .text(ban_unban(
+                args.next()
+                    .ok_or("ban command without telegram id")?
+                    .parse::<i64>()?,
+                author,
+                conn,
+            ))
+            .send(),
+        bot.edit_message_reply_markup(chat_id, message_id)
+            .reply_markup(keyboards::admin_users_keybard(
+                conn,
+                author.telegram_id.parse::<i64>()?,
+                &author.language,
+                args.next()
+                    .ok_or("ban command without telegram id")?
+                    .parse::<u32>()?,
+            )?)
+            .send()
+    )?;
+    Ok(())
+}
+
 /// Run and Share command handler
 pub async fn command_handler(
     bot: &AutoSend<Bot>,
@@ -864,8 +897,8 @@ async fn users_command_handler(
     conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let ctx = languages_ctx();
-    if let Some(_users_command) = args.next() {
-        match _users_command {
+    if let Some(users_command) = args.next() {
+        match users_command {
             "ban" => {
                 // The `ban` command is a service, it is not only used to block
                 // This means that you can use the `ban` command to block and unblock.
@@ -896,6 +929,7 @@ async fn users_command_handler(
             _ => (),
         };
     } else {
+        // TODO: Check if the chat is private
         match keyboards::admin_users_keybard(conn, message.from().unwrap().id, &author.language, 0)
         {
             Ok(keyboard) => {
@@ -924,6 +958,30 @@ async fn users_command_handler(
     Ok(())
 }
 
+async fn admin_callback_handler(
+    bot: AutoSend<Bot>,
+    args: &mut std::vec::IntoIter<&str>,
+    author: &Users,
+    query_id: &str,
+    message_id: i32,
+    chat_id: i64,
+    conn: &mut SqliteConnection,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    if let Some(command) = args.next() {
+        if command == "users" {
+            if let Some(users_command) = args.next() {
+                if users_command == "ban" {
+                    users_ban_answer(&bot, args, author, message_id, chat_id, query_id, conn)
+                        .await
+                        .log_on_error()
+                        .await;
+                }
+            }
+        }
+    };
+    Ok(())
+}
+
 async fn admin_handler(
     bot: AutoSend<Bot>,
     message: Message,
@@ -936,6 +994,7 @@ async fn admin_handler(
     if author.is_admin {
         if args.len() == 0 {
             // Send main admin interface if there no arguments
+            // TODO: Check if the chat is private
             bot.send_message(
                 message.chat.id,
                 format!(
@@ -1053,11 +1112,8 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
             bot_username(&bot).await.to_ascii_lowercase(),
         ) {
             let command: String = command.to_ascii_lowercase();
-            if author.can_send_command(conn)
-                || (["run", "share"].contains(&command.as_ref())
-                    && message.reply_to_message().is_none())
-            {
-                let ctx = languages_ctx();
+            let ctx = languages_ctx();
+            if author.can_send_command(conn) {
                 author
                     .update(message.from().unwrap(), conn)
                     .await
@@ -1251,7 +1307,11 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                 // Cannot send command
                 bot.send_message(
                     message.chat.id,
-                    if author.attempts >= author.attempts_maximum {
+                    if author.is_ban {
+                        get_text!(ctx, &author.language, "BAN_MESSAGE")
+                            .unwrap()
+                            .to_string()
+                    } else if author.attempts >= author.attempts_maximum {
                         attempt_error_message(&author)
                     } else {
                         delay_error_message(&author, true, conn)
@@ -1282,16 +1342,19 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
     // change_lang <new_language>
     // gotok <interface> <args: optional>...
     // goto <interface> <args: optional>...
+    // admin <command> <args: optional>...
 
     if let Some(callback_data) = callback_query.data.clone() {
         log::debug!("{callback_data}");
         let conn: &mut SqliteConnection = &mut rpg_db::establish_connection();
         let mut author: Users = rpg_db::get_user(conn, &callback_query.from).unwrap();
 
+        let ctx = languages_ctx();
         if author.can_click_button(conn) {
             // Can click button
             author.make_button_record(conn).log_on_error().await;
 
+            let message: &Message = callback_query.message.as_ref().unwrap();
             let mut args = callback_data
                 .split_whitespace()
                 .collect::<Vec<&str>>()
@@ -1355,7 +1418,6 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                     .await;
                 }
                 "change_lang" => {
-                    let message: Message = callback_query.message.unwrap();
                     change_language(
                         &bot,
                         &mut author,
@@ -1400,11 +1462,29 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                     .await;
                 }
 
+                "admin" => {
+                    admin_callback_handler(
+                        bot,
+                        &mut args,
+                        &author,
+                        &callback_query.id,
+                        message.id,
+                        message.chat.id,
+                        conn,
+                    )
+                    .await
+                    .log_on_error()
+                    .await;
+                }
                 _ => (),
             };
         } else {
             bot.answer_callback_query(callback_query.id)
-                .text(if author.attempts >= author.attempts_maximum {
+                .text(if author.is_ban {
+                    get_text!(ctx, &author.language, "BAN_MESSAGE")
+                        .unwrap()
+                        .to_string()
+                } else if author.attempts >= author.attempts_maximum {
                     attempt_error_message(&author)
                 } else {
                     delay_error_message(&author, false, conn)
