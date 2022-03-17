@@ -33,7 +33,6 @@ use strfmt::strfmt;
 use teloxide::utils::command::parse_command;
 use teloxide::{
     prelude2::*,
-    requests::Requester,
     types::{ForwardedFrom, InlineKeyboardMarkup, ParseMode, User},
     utils::command::BotCommand,
     RequestError,
@@ -678,6 +677,80 @@ pub fn info_text(author: &Users, language: &str, conn: &mut SqliteConnection) ->
     .unwrap()
 }
 
+/// ban/unban user by telegram id
+/// > Note: All `String` is less than 64 bytes
+fn ban_unban(user_id: i64, author: &Users, conn: &mut SqliteConnection) -> String {
+    let ctx = languages_ctx();
+    if user_id.eq(&author.telegram_id.parse::<i64>().unwrap()) {
+        get_text!(ctx, &author.language, "CANNOT_BAN_YOURSELF")
+            .unwrap()
+            .to_string()
+    } else if let Some(mut user) = Users::get_by_telegram_id(conn, user_id.to_string()) {
+        if user.is_admin && author.id.ne(&rpg_db::super_user_id()) {
+            get_text!(ctx, &author.language, "CANNOT_BAN_ADMIN")
+                .unwrap()
+                .to_string()
+        } else if user.switch_ban_stutes(conn).is_err() {
+            // If there error
+            get_text!(ctx, &author.language, "ERROR_WHILE_DO")
+                .unwrap()
+                .to_string()
+        } else if user.is_ban {
+            // This means it was banned
+            get_text!(ctx, &author.language, "SUCCESSFULLY_BLOCKED")
+                .unwrap()
+                .to_string()
+        } else {
+            // This means it wasn't banned
+            get_text!(ctx, &author.language, "SUCCESSFULLY_UNBLOCKED")
+                .unwrap()
+                .to_string()
+        }
+    } else {
+        get_text!(ctx, &author.language, "USER_NOT_FOUND")
+            .unwrap()
+            .to_string()
+    }
+}
+
+/// ban/unban user by username
+/// > Note: All `String` is less than 64 bytes
+fn ban_unban_by_username(username: &str, author: &Users, conn: &mut SqliteConnection) -> String {
+    let ctx = languages_ctx();
+    if author.is_admin {
+        if let Some(user) = Users::get_by_telegram_username(conn, username) {
+            ban_unban(user.telegram_id.parse().unwrap_or(0), author, conn)
+        } else {
+            get_text!(ctx, &author.language, "INVALID_ID_ERROR")
+                .unwrap()
+                .to_string()
+        }
+    } else {
+        get_text!(ctx, &author.language, "ADMIN_COMMAND_ERROR")
+            .unwrap()
+            .to_string()
+    }
+}
+
+/// ban/unban user by message
+/// > Note: All `String` is less than 64 bytes
+fn ban_unban_by_message(conn: &mut SqliteConnection, message: &Message, author: &Users) -> String {
+    let ctx = languages_ctx();
+    if author.is_admin {
+        if let Some(user_id) = get_author_id(message) {
+            ban_unban(user_id, author, conn)
+        } else {
+            get_text!(ctx, &author.language, "INVALID_ID_ERROR")
+                .unwrap()
+                .to_string()
+        }
+    } else {
+        get_text!(ctx, &author.language, "ADMIN_COMMAND_ERROR")
+            .unwrap()
+            .to_string()
+    }
+}
+
 /// Return info from message object, use `get_author_id`
 fn info_text_by_message(conn: &mut SqliteConnection, message: &Message, author: &Users) -> String {
     let ctx = languages_ctx();
@@ -792,9 +865,36 @@ async fn users_command_handler(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let ctx = languages_ctx();
     if let Some(_users_command) = args.next() {
-        todo!("users ban/unban admin commands"); // TODO: ban/unban by id_i64/username, and reply message.
-                                                 // Create a function returns ID and combine it with `get_author_id`?,
-                                                 // check that the ID is not the ID of the requester
+        match _users_command {
+            "ban" => {
+                // The `ban` command is a service, it is not only used to block
+                // This means that you can use the `ban` command to block and unblock.
+                // how? If the command is used with a banned user, this means canceling his ban and vice versa
+                bot.send_message(
+                    message.chat.id,
+                    if let Some(user_id_or_username) = args.next() {
+                        if let Ok(user_id) = user_id_or_username.parse::<i64>() {
+                            // ban/unban user by telegram id
+                            ban_unban(user_id, author, conn)
+                        } else {
+                            // ban/unban user by telegram username
+                            ban_unban_by_username(user_id_or_username, author, conn)
+                        }
+                    } else {
+                        ban_unban_by_message(conn, message, author)
+                    },
+                )
+                .reply_to_message_id(message.id)
+                .send()
+                .await
+                .log_on_error()
+                .await
+            }
+            "admin" => {
+                unimplemented!("Make something like `ban_unban_by_message`");
+            }
+            _ => (),
+        };
     } else {
         match keyboards::admin_users_keybard(conn, message.from().unwrap().id, &author.language, 0)
         {
@@ -835,7 +935,7 @@ async fn admin_handler(
     let mut args = args.into_iter();
     if author.is_admin {
         if args.len() == 0 {
-            // Send admin keyboard if there no arguments
+            // Send main admin interface if there no arguments
             bot.send_message(
                 message.chat.id,
                 format!(
@@ -848,7 +948,7 @@ async fn admin_handler(
             .send()
             .await?;
         } else {
-            // Handel the admin command
+            // Handel the admin commands
             if let Some(admin_command) = args.next() {
                 if admin_command.eq("users") {
                     users_command_handler(&bot, &message, &author, &mut args, conn).await?;

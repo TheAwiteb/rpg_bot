@@ -310,7 +310,6 @@ pub fn admin_users_keybard(
                         ),
                         InlineKeyboardButton::callback(
                             if user.is_ban { "✔️" } else { "✖️" }.to_string(),
-                            // TODO: Enable to ban/unban users
                             format!("admin users ban {} {}", user.telegram_id, page_number),
                         ),
                         InlineKeyboardButton::callback(
