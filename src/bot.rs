@@ -929,29 +929,46 @@ async fn users_command_handler(
             _ => (),
         };
     } else {
-        // TODO: Check if the chat is private
-        match keyboards::admin_users_keybard(conn, message.from().unwrap().id, &author.language, 0)
-        {
-            Ok(keyboard) => {
-                bot.send_message(
-                    message.chat.id,
-                    format!(
-                        "{} 👮‍♂️",
-                        get_text!(ctx, &author.language, "ADMIN_USERS_MESSAGE").unwrap()
-                    ),
-                )
-                .reply_to_message_id(message.id)
-                .reply_markup(keyboard)
-                .send()
-                .await?;
-            }
-            Err(err) => {
-                // This error will appear when the number of users exceeds `18446744073709551615` users. :/
-                bot.send_message(message.chat.id, err.to_string())
+        // Check if the chat is private
+        if message.chat.is_private() {
+            match keyboards::admin_users_keybard(
+                conn,
+                message.from().unwrap().id,
+                &author.language,
+                0,
+            ) {
+                Ok(keyboard) => {
+                    bot.send_message(
+                        message.chat.id,
+                        format!(
+                            "{} 👮‍♂️",
+                            get_text!(ctx, &author.language, "ADMIN_USERS_MESSAGE").unwrap()
+                        ),
+                    )
                     .reply_to_message_id(message.id)
+                    .reply_markup(keyboard)
                     .send()
                     .await?;
+                }
+                Err(err) => {
+                    // This error will appear when the number of users exceeds `18446744073709551615` users. :/
+                    bot.send_message(message.chat.id, err.to_string())
+                        .reply_to_message_id(message.id)
+                        .send()
+                        .await?;
+                }
             }
+        } else {
+            bot.send_message(
+                message.chat.id,
+                format!(
+                    "{} 👮‍♂️",
+                    get_text!(ctx, &author.language, "PUBLIC_ERROR").unwrap()
+                ),
+            )
+            .reply_to_message_id(message.id)
+            .send()
+            .await?;
         }
     };
 
@@ -992,28 +1009,40 @@ async fn admin_handler(
     let ctx = languages_ctx();
     let mut args = args.into_iter();
     if author.is_admin {
-        if args.len() == 0 {
-            // Send main admin interface if there no arguments
-            // TODO: Check if the chat is private
-            bot.send_message(
-                message.chat.id,
-                format!(
-                    "{} 👮‍♂️",
-                    get_text!(ctx, &author.language, "ADMIN_MAIN_MESSAGE").unwrap()
-                ),
-            )
-            .reply_to_message_id(message.id)
-            .reply_markup(keyboards::admin_main_keybard(&author.language))
-            .send()
-            .await?;
+        // Handel the admin commands
+        if let Some(admin_command) = args.next() {
+            if admin_command.eq("users") {
+                users_command_handler(&bot, &message, &author, &mut args, conn).await?;
+            } else {
+                todo!("broadcast, settings");
+            };
         } else {
-            // Handel the admin commands
-            if let Some(admin_command) = args.next() {
-                if admin_command.eq("users") {
-                    users_command_handler(&bot, &message, &author, &mut args, conn).await?;
-                } else {
-                    todo!("broadcast, settings");
-                };
+            // Send main admin interface if there no arguments
+            // Check if the chat is private
+            if message.chat.is_private() {
+                bot.send_message(
+                    message.chat.id,
+                    format!(
+                        "{} 👮‍♂️",
+                        get_text!(ctx, &author.language, "ADMIN_MAIN_MESSAGE").unwrap()
+                    ),
+                )
+                .reply_to_message_id(message.id)
+                .reply_markup(keyboards::admin_main_keybard(&author.language))
+                .send()
+                .await?;
+            } else {
+                // Cannot send admin interface in public chat
+                bot.send_message(
+                    message.chat.id,
+                    format!(
+                        "{} 👮‍♂️",
+                        get_text!(ctx, &author.language, "PUBLIC_ERROR").unwrap()
+                    ),
+                )
+                .reply_to_message_id(message.id)
+                .send()
+                .await?;
             }
         }
     } else {
