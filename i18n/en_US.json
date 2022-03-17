@@ -38,6 +38,7 @@
   "NEXT_BUTTON": "Next",
   "NOT_FOUND": "No found",
   "PREVIOUS_BUTTON": "Previous",
+  "PUBLIC_ERROR": "Sorry, this command cannot be run in a public group",
   "REPLY_FOR_ADMIN_ONLY": "Sorry, using this command to reply to another message is for admins only",
   "REPLY_MESSAGE": "Use this command in a reply to another message!",
   "REPOSITORY": "Repository",
