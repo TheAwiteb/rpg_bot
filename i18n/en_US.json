@@ -13,6 +13,7 @@
   "BACK_BUTTON": "Back",
   "BANNED": "Banned",
   "BANNED_STATUS": "User ban status",
+  "BAN_MESSAGE": "You have been banned from using the bot",
   "BROADCAST": "Broadcast",
   "CANNOT_BAN_YOURSELF": "Sorry you cannot ban yourself",
   "CANNOT_RUN_INVALID_CODE": "Cannot_run_invalid_source_code_🤨",
