@@ -296,6 +296,16 @@ impl Users {
             .ok()
     }
 
+    /// Returns user by telegram username if is found
+    pub fn get_by_telegram_username(conn: &mut SqliteConnection, username: &str) -> Option<Self> {
+        use super::schema::users::dsl::{username as username_query, users};
+
+        users
+            .filter(username_query.eq(username))
+            .first::<Self>(conn)
+            .ok()
+    }
+
     /// Update user (`username` and `telegram_fullname`)
     pub async fn update(
         &mut self,
@@ -383,6 +393,33 @@ impl Users {
             .set(username.eq(new_username))
             .execute(conn)?;
         self.username = new_username.clone();
+        Ok(())
+    }
+
+    /// update `is_ban`, `is_admin`, `ban_date`
+    pub fn switch_ban_stutes(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
+        use super::schema::users::dsl::{ban_date, is_admin, is_ban, users};
+        // If user is banned that mean the ban will removed
+        let timestamp: Option<NaiveDateTime> = if self.is_ban {
+            None
+        } else {
+            Some(NaiveDateTime::from_timestamp(
+                offset::Utc::now().timestamp(),
+                0,
+            ))
+        };
+        update(users.find(self.id))
+            .set(is_ban.eq(!self.is_ban))
+            .execute(conn)?;
+        update(users.find(self.id))
+            .set(is_admin.eq(false))
+            .execute(conn)?;
+        update(users.find(self.id))
+            .set(ban_date.eq(timestamp))
+            .execute(conn)?;
+        self.is_ban = !self.is_ban;
+        self.is_admin = false;
+        self.ban_date = timestamp;
         Ok(())
     }
 
