@@ -430,10 +430,11 @@ impl Users {
             .value
             .parse::<i64>()
             .expect("`command_delay` config should be integer");
-        ((self.last_command_record.is_none())
-            || ((self.last_command_record.unwrap().timestamp() + command_delay)
-                <= offset::Utc::now().timestamp()))
-            && (self.attempts < self.attempts_maximum)
+        !self.is_ban
+            && (((self.last_command_record.is_none())
+                || ((self.last_command_record.unwrap().timestamp() + command_delay)
+                    <= offset::Utc::now().timestamp()))
+                && (self.attempts < self.attempts_maximum))
     }
 
     /// Returns `true` if user can click button
@@ -443,10 +444,11 @@ impl Users {
             .value
             .parse::<i64>()
             .expect("`button_delay` config should be integer");
-        ((self.last_button_record.is_none())
-            || ((self.last_button_record.unwrap().timestamp() + button_delay)
-                <= offset::Utc::now().timestamp()))
-            && (self.attempts < self.attempts_maximum)
+        !self.is_ban
+            && (((self.last_button_record.is_none())
+                || ((self.last_button_record.unwrap().timestamp() + button_delay)
+                    <= offset::Utc::now().timestamp()))
+                && (self.attempts < self.attempts_maximum))
     }
 
     /// create new source code for user
