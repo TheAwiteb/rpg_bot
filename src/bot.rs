@@ -990,13 +990,18 @@ fn get_message_text(
                 "{} 👮‍♂️",
                 get_text!(ctx, &author.language, "ADMIN_USERS_MESSAGE").unwrap()
             )),
-            // FIXME: Will panic if user dose not exist, use `USER_NOT_FOUND` message
-            // hint use if let
-            "users-info" => Some(info_text(
-                &Users::get_by_telegram_id(conn, args.next()?.into())?,
-                &author.language,
-                conn,
-            )),
+            "users-info" => {
+                let user: Option<Users> = Users::get_by_telegram_id(conn, args.next()?.into());
+                if let Some(user) = user {
+                    Some(info_text(&user, &author.language, conn))
+                } else {
+                    Some(
+                        get_text!(ctx, &author.language, "USER_NOT_FOUND")
+                            .unwrap()
+                            .to_string(),
+                    )
+                }
+            }
             _ => None,
         }
     } else {
