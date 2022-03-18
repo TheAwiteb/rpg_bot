@@ -301,7 +301,7 @@ impl Users {
         use super::schema::users::dsl::{username as username_query, users};
 
         users
-            .filter(username_query.eq(username))
+            .filter(username_query.eq(username.strip_prefix('@')))
             .first::<Self>(conn)
             .ok()
     }
