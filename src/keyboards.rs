@@ -232,7 +232,7 @@ pub fn admin_main_keybard(language: &str) -> InlineKeyboardMarkup {
 }
 
 /// Returns users interface
-pub fn admin_users_keybard(
+pub fn admin_users_keyboard(
     conn: &mut SqliteConnection,
     user_telegram_id: i64,
     language: &str,
@@ -316,7 +316,6 @@ pub fn admin_users_keybard(
                             if user.is_admin { "✔️" } else { "✖️" }.to_string(),
                             if user_telegram_id.eq(&(rpg_db::super_user_id() as i64)) {
                                 if user.telegram_id.ne(&user_telegram_id.to_string()) {
-                                    // TODO: Enable to admin/unadmin users
                                     format!(
                                         "admin users admin {} {}",
                                         user.telegram_id, page_number
