@@ -532,7 +532,7 @@ async fn update_options(
 
         let message: Message = callback_query.clone().message.unwrap();
         let old_keyboard: &InlineKeyboardMarkup = message.reply_markup().unwrap();
-        let answer = bot
+        let change_option_name_answer = bot
             .answer_callback_query(&callback_query.id)
             .text(
                 strfmt(
@@ -557,7 +557,7 @@ async fn update_options(
 
         if &keyboard != old_keyboard {
             try_join!(
-                answer,
+                change_option_name_answer,
                 bot.edit_message_reply_markup(message.chat.id, message.id)
                     .reply_markup(keyboard)
                     .send()
@@ -565,7 +565,7 @@ async fn update_options(
             .log_on_error()
             .await;
         } else {
-            answer.await.log_on_error().await;
+            change_option_name_answer.await.log_on_error().await;
         }
     } else {
         cannot_reached_answer(bot, &callback_query.id, language).await;
@@ -677,6 +677,93 @@ pub fn info_text(author: &Users, language: &str, conn: &mut SqliteConnection) ->
     .unwrap()
 }
 
+/// admin/unadmin user by telegram id
+/// > Note: All `String` is less than 64 bytes
+fn admin_unadmin(user_id: i64, author: &Users, conn: &mut SqliteConnection) -> String {
+    let ctx = languages_ctx();
+    if user_id.eq(&author.telegram_id.parse::<i64>().unwrap()) {
+        get_text!(ctx, &author.language, "CANNOT_UNADMIN_YORSELF")
+            .unwrap()
+            .to_string()
+    } else if let Some(mut user) = Users::get_by_telegram_id(conn, user_id.to_string()) {
+        if user.is_admin && author.telegram_id.ne(&rpg_db::super_user_id().to_string()) {
+            get_text!(ctx, &author.language, "CANNOT_UNADMIN_ADMIN")
+                .unwrap()
+                .to_string()
+        } else if user.switch_admin_stutes(conn).is_err() {
+            // If there error
+            get_text!(ctx, &author.language, "ERROR_WHILE_DO")
+                .unwrap()
+                .to_string()
+        } else if user.is_ban {
+            get_text!(ctx, &author.language, "CANNOT_ADMIN_BANNED_USER")
+                .unwrap()
+                .to_string()
+        } else if user.is_admin {
+            // This means it was admin
+            get_text!(ctx, &author.language, "SUCCESSFULLY_ADMIN")
+                .unwrap()
+                .to_string()
+        } else {
+            // This means it wasn't admin
+            get_text!(ctx, &author.language, "SUCCESSFULLY_UNADMIN")
+                .unwrap()
+                .to_string()
+        }
+    } else {
+        get_text!(ctx, &author.language, "USER_NOT_FOUND")
+            .unwrap()
+            .to_string()
+    }
+}
+
+/// admin/unadmin user by username
+/// > Note: All `String` is less than 64 bytes
+fn admin_unadmin_by_username(
+    username: &str,
+    author: &Users,
+    conn: &mut SqliteConnection,
+) -> String {
+    let ctx = languages_ctx();
+    if author.is_admin {
+        if let Some(user) = Users::get_by_telegram_username(conn, username) {
+            // `0` here will appear user not found message (:
+            admin_unadmin(user.telegram_id.parse().unwrap_or(0), author, conn)
+        } else {
+            get_text!(ctx, &author.language, "INVALID_ID_ERROR")
+                .unwrap()
+                .to_string()
+        }
+    } else {
+        get_text!(ctx, &author.language, "ADMIN_COMMAND_ERROR")
+            .unwrap()
+            .to_string()
+    }
+}
+
+/// admin/unadmin user by message
+/// > Note: All `String` is less than 64 bytes
+fn admin_unadmin_by_message(
+    conn: &mut SqliteConnection,
+    message: &Message,
+    author: &Users,
+) -> String {
+    let ctx = languages_ctx();
+    if author.is_admin {
+        if let Some(user_id) = get_author_id(message) {
+            admin_unadmin(user_id, author, conn)
+        } else {
+            get_text!(ctx, &author.language, "INVALID_ID_ERROR")
+                .unwrap()
+                .to_string()
+        }
+    } else {
+        get_text!(ctx, &author.language, "ADMIN_COMMAND_ERROR")
+            .unwrap()
+            .to_string()
+    }
+}
+
 /// ban/unban user by telegram id
 /// > Note: All `String` is less than 64 bytes
 fn ban_unban(user_id: i64, author: &Users, conn: &mut SqliteConnection) -> String {
@@ -686,7 +773,7 @@ fn ban_unban(user_id: i64, author: &Users, conn: &mut SqliteConnection) -> Strin
             .unwrap()
             .to_string()
     } else if let Some(mut user) = Users::get_by_telegram_id(conn, user_id.to_string()) {
-        if user.is_admin && author.id.ne(&rpg_db::super_user_id()) {
+        if user.is_admin && author.telegram_id.ne(&rpg_db::super_user_id().to_string()) {
             get_text!(ctx, &author.language, "CANNOT_BAN_ADMIN")
                 .unwrap()
                 .to_string()
@@ -719,6 +806,7 @@ fn ban_unban_by_username(username: &str, author: &Users, conn: &mut SqliteConnec
     let ctx = languages_ctx();
     if author.is_admin {
         if let Some(user) = Users::get_by_telegram_username(conn, username) {
+            // `0` here will appear user not found message (:
             ban_unban(user.telegram_id.parse().unwrap_or(0), author, conn)
         } else {
             get_text!(ctx, &author.language, "INVALID_ID_ERROR")
@@ -823,6 +911,41 @@ fn get_author_id_message(message: &Message, language: &str) -> String {
     }
 }
 
+async fn users_admin_answer(
+    bot: &AutoSend<Bot>,
+    args: &mut std::vec::IntoIter<&str>,
+    author: &Users,
+    message_id: i32,
+    chat_id: i64,
+    query_id: &str,
+    conn: &mut SqliteConnection,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    try_join!(
+        bot.answer_callback_query(query_id)
+            .text(admin_unadmin(
+                args.next()
+                    .ok_or("ban command without telegram id")?
+                    .parse::<i64>()?,
+                author,
+                conn,
+            ))
+            .send(),
+        // FIXME: Dont update if no need to use method as in `update_options` function
+            // that fix `MessageNotModified` Error
+        bot.edit_message_reply_markup(chat_id, message_id)
+            .reply_markup(keyboards::admin_users_keyboard(
+                conn,
+                author.telegram_id.parse::<i64>()?,
+                &author.language,
+                args.next()
+                    .ok_or("ban command without page number")?
+                    .parse::<u32>()?,
+            )?)
+            .send()
+    )?;
+    Ok(())
+}
+
 async fn users_ban_answer(
     bot: &AutoSend<Bot>,
     args: &mut std::vec::IntoIter<&str>,
@@ -842,13 +965,15 @@ async fn users_ban_answer(
                 conn,
             ))
             .send(),
+        // FIXME: Dont update if no need to use method as in `update_options` function
+            // that fix `MessageNotModified` Error
         bot.edit_message_reply_markup(chat_id, message_id)
-            .reply_markup(keyboards::admin_users_keybard(
+            .reply_markup(keyboards::admin_users_keyboard(
                 conn,
                 author.telegram_id.parse::<i64>()?,
                 &author.language,
                 args.next()
-                    .ok_or("ban command without telegram id")?
+                    .ok_or("ban command without page number")?
                     .parse::<u32>()?,
             )?)
             .send()
@@ -921,17 +1046,36 @@ async fn users_command_handler(
                 .send()
                 .await
                 .log_on_error()
-                .await
+                .await;
             }
+            // `admin` command same `ban` is service.
             "admin" => {
-                unimplemented!("Make something like `ban_unban_by_message`");
+                bot.send_message(
+                    message.chat.id,
+                    if let Some(user_id_or_username) = args.next() {
+                        if let Ok(user_id) = user_id_or_username.parse::<i64>() {
+                            // admin/unadmin user by telegram id
+                            admin_unadmin(user_id, author, conn)
+                        } else {
+                            // admin/unadmin user by telegram username
+                            admin_unadmin_by_username(user_id_or_username, author, conn)
+                        }
+                    } else {
+                        admin_unadmin_by_message(conn, message, author)
+                    },
+                )
+                .reply_to_message_id(message.id)
+                .send()
+                .await
+                .log_on_error()
+                .await;
             }
             _ => (),
         };
     } else {
         // Check if the chat is private
         if message.chat.is_private() {
-            match keyboards::admin_users_keybard(
+            match keyboards::admin_users_keyboard(
                 conn,
                 message.from().unwrap().id,
                 &author.language,
@@ -987,11 +1131,20 @@ async fn admin_callback_handler(
     if let Some(command) = args.next() {
         if command == "users" {
             if let Some(users_command) = args.next() {
-                if users_command == "ban" {
-                    users_ban_answer(&bot, args, author, message_id, chat_id, query_id, conn)
-                        .await
-                        .log_on_error()
-                        .await;
+                match users_command {
+                    "ban" => {
+                        users_ban_answer(&bot, args, author, message_id, chat_id, query_id, conn)
+                            .await
+                            .log_on_error()
+                            .await
+                    }
+                    "admin" => {
+                        users_admin_answer(&bot, args, author, message_id, chat_id, query_id, conn)
+                            .await
+                            .log_on_error()
+                            .await
+                    }
+                    _ => {}
                 }
             }
         }
@@ -1106,7 +1259,7 @@ fn get_keyboard(
     if let Some(interface) = args.next() {
         match interface {
             "admin" => Some(keyboards::admin_main_keybard(&author.language)),
-            "users" => keyboards::admin_users_keybard(
+            "users" => keyboards::admin_users_keyboard(
                 conn,
                 author
                     .telegram_id
