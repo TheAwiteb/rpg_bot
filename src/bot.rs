@@ -262,7 +262,12 @@ fn attempt_error_message(author: &Users) -> String {
     );
     strfmt(
         &get_text!(ctx, &author.language, "EXCEEDED_ATTEMPTS_MESSAGE")
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`EXCEEDED_ATTEMPTS_MESSAGE` translation not found in `{}` language",
+                    &author.language
+                )
+            })
             .to_string(),
         &vars,
     )
@@ -388,7 +393,12 @@ pub async fn share_run_answer_message(
         bot.send_message(
             message.chat.id,
             get_text!(ctx, &author.language, "MUST_BE_TEXT")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`MUST_BE_TEXT` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string(),
         )
         .reply_to_message_id(message.id)
@@ -462,7 +472,12 @@ async fn cannot_reached_answer(bot: &AutoSend<Bot>, query_id: &str, language: &s
     bot.answer_callback_query(query_id)
         .text(
             get_text!(ctx, language, "SOURCES_CANNOT_REACHED")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`SOURCES_CANNOT_REACHED` translation not found in `{}` language",
+                        language
+                    )
+                })
                 .to_string(),
         )
         .send()
@@ -536,7 +551,14 @@ async fn update_options(
             .answer_callback_query(&callback_query.id)
             .text(
                 strfmt(
-                    &get_text!(ctx, language, "SET_MESSAGE").unwrap().to_string(),
+                    &get_text!(ctx, language, "SET_MESSAGE")
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "`SET_MESSAGE` translation not found in `{}` language",
+                                language
+                            )
+                        })
+                        .to_string(),
                     &vars,
                 )
                 .unwrap(),
@@ -590,7 +612,12 @@ async fn change_language(
         bot.answer_callback_query(query_id)
             .text(
                 get_text!(ctx, &new_language, "ALREADY_CURRENT_LANGUAGE")
-                    .unwrap()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "`ALREADY_CURRENT_LANGUAGE` translation not found in `{}` language",
+                            &new_language
+                        )
+                    })
                     .to_string()
                     + " 🤨",
             )
@@ -607,7 +634,12 @@ async fn change_language(
             chat_id,
             message_id,
             get_text!(ctx, &new_language, "CHANGE_LANGUAGE_SUCCESSFULLY")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`CHANGE_LANGUAGE_SUCCESSFULLY` translation not found in `{}` language",
+                        &new_language
+                    )
+                })
                 .to_string()
                 + " 🤖",
         )
@@ -627,7 +659,14 @@ pub fn info_text(author: &Users, language: &str, conn: &mut SqliteConnection) ->
         "username".into(),
         match &author.username {
             Some(username) => format!("@{}", username),
-            None => get_text!(ctx, language, "NOT_FOUND").unwrap().to_string(),
+            None => get_text!(ctx, language, "NOT_FOUND")
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`NOT_FOUND` translation not found in `{}` language",
+                        language
+                    )
+                })
+                .to_string(),
         },
     );
     vars.insert("telegram_id".into(), author.telegram_id.clone());
@@ -644,7 +683,14 @@ pub fn info_text(author: &Users, language: &str, conn: &mut SqliteConnection) ->
         "ban_date".into(),
         match author.ban_date {
             Some(date) => date.to_string(),
-            None => get_text!(ctx, language, "NOT_FOUND").unwrap().to_string(),
+            None => get_text!(ctx, language, "NOT_FOUND")
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`NOT_FOUND` translation not found in `{}` language",
+                        language
+                    )
+                })
+                .to_string(),
         },
     );
     vars.insert("full_name".into(), author.telegram_fullname.clone());
@@ -670,7 +716,12 @@ pub fn info_text(author: &Users, language: &str, conn: &mut SqliteConnection) ->
 
     strfmt(
         &get_text!(ctx, language, "INFO_MESSAGE")
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`INFO_MESSAGE` translation not found in `{}` language",
+                    language
+                )
+            })
             .to_string(),
         &vars,
     )
@@ -683,36 +734,71 @@ fn admin_unadmin(user_id: i64, author: &Users, conn: &mut SqliteConnection) -> S
     let ctx = languages_ctx();
     if user_id.eq(&author.telegram_id.parse::<i64>().unwrap()) {
         get_text!(ctx, &author.language, "CANNOT_UNADMIN_YORSELF")
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`CANNOT_UNADMIN_YORSELF` translation not found in `{}` language",
+                    &author.language
+                )
+            })
             .to_string()
     } else if let Some(mut user) = Users::get_by_telegram_id(conn, user_id.to_string()) {
         if user.is_admin && author.telegram_id.ne(&rpg_db::super_user_id().to_string()) {
             get_text!(ctx, &author.language, "CANNOT_UNADMIN_ADMIN")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`CANNOT_UNADMIN_ADMIN` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         } else if user.switch_admin_stutes(conn).is_err() {
             // If there error
             get_text!(ctx, &author.language, "ERROR_WHILE_DO")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`ERROR_WHILE_DO` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         } else if user.is_ban {
             get_text!(ctx, &author.language, "CANNOT_ADMIN_BANNED_USER")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`CANNOT_ADMIN_BANNED_USER` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         } else if user.is_admin {
             // This means it was admin
             get_text!(ctx, &author.language, "SUCCESSFULLY_ADMIN")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`SUCCESSFULLY_ADMIN` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         } else {
             // This means it wasn't admin
             get_text!(ctx, &author.language, "SUCCESSFULLY_UNADMIN")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`SUCCESSFULLY_UNADMIN` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         }
     } else {
         get_text!(ctx, &author.language, "USER_NOT_FOUND")
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`USER_NOT_FOUND` translation not found in `{}` language",
+                    &author.language
+                )
+            })
             .to_string()
     }
 }
@@ -731,12 +817,22 @@ fn admin_unadmin_by_username(
             admin_unadmin(user.telegram_id.parse().unwrap_or(0), author, conn)
         } else {
             get_text!(ctx, &author.language, "INVALID_ID_ERROR")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`INVALID_ID_ERROR` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         }
     } else {
         get_text!(ctx, &author.language, "ADMIN_COMMAND_ERROR")
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`ADMIN_COMMAND_ERROR` translation not found in `{}` language",
+                    &author.language
+                )
+            })
             .to_string()
     }
 }
@@ -754,12 +850,22 @@ fn admin_unadmin_by_message(
             admin_unadmin(user_id, author, conn)
         } else {
             get_text!(ctx, &author.language, "INVALID_ID_ERROR")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`INVALID_ID_ERROR` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         }
     } else {
         get_text!(ctx, &author.language, "ADMIN_COMMAND_ERROR")
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`ADMIN_COMMAND_ERROR` translation not found in `{}` language",
+                    &author.language
+                )
+            })
             .to_string()
     }
 }
@@ -770,32 +876,62 @@ fn ban_unban(user_id: i64, author: &Users, conn: &mut SqliteConnection) -> Strin
     let ctx = languages_ctx();
     if user_id.eq(&author.telegram_id.parse::<i64>().unwrap()) {
         get_text!(ctx, &author.language, "CANNOT_BAN_YOURSELF")
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`CANNOT_BAN_YOURSELF` translation not found in `{}` language",
+                    &author.language
+                )
+            })
             .to_string()
     } else if let Some(mut user) = Users::get_by_telegram_id(conn, user_id.to_string()) {
         if user.is_admin && author.telegram_id.ne(&rpg_db::super_user_id().to_string()) {
             get_text!(ctx, &author.language, "CANNOT_BAN_ADMIN")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`CANNOT_BAN_ADMIN` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         } else if user.switch_ban_stutes(conn).is_err() {
             // If there error
             get_text!(ctx, &author.language, "ERROR_WHILE_DO")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`ERROR_WHILE_DO` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         } else if user.is_ban {
             // This means it was banned
             get_text!(ctx, &author.language, "SUCCESSFULLY_BLOCKED")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`SUCCESSFULLY_BLOCKED` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         } else {
             // This means it wasn't banned
             get_text!(ctx, &author.language, "SUCCESSFULLY_UNBLOCKED")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`SUCCESSFULLY_UNBLOCKED` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         }
     } else {
         get_text!(ctx, &author.language, "USER_NOT_FOUND")
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`USER_NOT_FOUND` translation not found in `{}` language",
+                    &author.language
+                )
+            })
             .to_string()
     }
 }
@@ -810,12 +946,22 @@ fn ban_unban_by_username(username: &str, author: &Users, conn: &mut SqliteConnec
             ban_unban(user.telegram_id.parse().unwrap_or(0), author, conn)
         } else {
             get_text!(ctx, &author.language, "INVALID_ID_ERROR")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`INVALID_ID_ERROR` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         }
     } else {
         get_text!(ctx, &author.language, "ADMIN_COMMAND_ERROR")
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`ADMIN_COMMAND_ERROR` translation not found in `{}` language",
+                    &author.language
+                )
+            })
             .to_string()
     }
 }
@@ -829,12 +975,22 @@ fn ban_unban_by_message(conn: &mut SqliteConnection, message: &Message, author: 
             ban_unban(user_id, author, conn)
         } else {
             get_text!(ctx, &author.language, "INVALID_ID_ERROR")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`INVALID_ID_ERROR` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         }
     } else {
         get_text!(ctx, &author.language, "ADMIN_COMMAND_ERROR")
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`ADMIN_COMMAND_ERROR` translation not found in `{}` language",
+                    &author.language
+                )
+            })
             .to_string()
     }
 }
@@ -850,17 +1006,32 @@ fn info_text_by_message(conn: &mut SqliteConnection, message: &Message, author: 
                 info_text(&user, &author.language, conn)
             } else {
                 get_text!(ctx, &author.language, "USER_NOT_FOUND")
-                    .unwrap()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "`USER_NOT_FOUND` translation not found in `{}` language",
+                            &author.language
+                        )
+                    })
                     .to_string()
             }
         } else {
             get_text!(ctx, &author.language, "REPLY_FOR_ADMIN_ONLY")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`REPLY_FOR_ADMIN_ONLY` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string()
         }
     } else {
         get_text!(ctx, &author.language, "INVALID_ID_ERROR")
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`INVALID_ID_ERROR` translation not found in `{}` language",
+                    &author.language
+                )
+            })
             .to_string()
     }
 }
@@ -894,19 +1065,30 @@ fn get_author_id_message(message: &Message, language: &str) -> String {
         if user_id.eq(&message.from().unwrap().id) {
             format!(
                 "{}: `{}`",
-                get_text!(ctx, language, "YOUR_ID_MESSAGE").unwrap(),
+                get_text!(ctx, language, "YOUR_ID_MESSAGE").unwrap_or_else(|| panic!(
+                    "`YOUR_ID_MESSAGE` translation not found in `{}` language",
+                    language
+                )),
                 user_id
             )
         } else {
             format!(
                 "{}: `{}`",
-                get_text!(ctx, language, "AUTHOR_ID_MESSAGE").unwrap(),
+                get_text!(ctx, language, "AUTHOR_ID_MESSAGE").unwrap_or_else(|| panic!(
+                    "`AUTHOR_ID_MESSAGE` translation not found in `{}` language",
+                    language
+                )),
                 user_id
             )
         }
     } else {
         get_text!(ctx, language, "INVALID_ID_ERROR")
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`INVALID_ID_ERROR` translation not found in `{}` language",
+                    language
+                )
+            })
             .to_string()
     }
 }
@@ -957,7 +1139,7 @@ async fn users_admin_answer(
     callback_query: &CallbackQuery,
     conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    ban_admin_answer(bot, args, author, callback_query,admin_unadmin, conn).await?;
+    ban_admin_answer(bot, args, author, callback_query, admin_unadmin, conn).await?;
     Ok(())
 }
 
@@ -968,7 +1150,7 @@ async fn users_ban_answer(
     callback_query: &CallbackQuery,
     conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    ban_admin_answer(bot, args, author, callback_query,ban_unban, conn).await?;
+    ban_admin_answer(bot, args, author, callback_query, ban_unban, conn).await?;
     Ok(())
 }
 
@@ -992,7 +1174,12 @@ pub async fn command_handler(
         bot.send_message(
             message.chat.id,
             get_text!(ctx, &author.language, "REPLY_MESSAGE")
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`REPLY_MESSAGE` translation not found in `{}` language",
+                        &author.language
+                    )
+                })
                 .to_string(),
         )
         .reply_to_message_id(message.id)
@@ -1077,7 +1264,12 @@ async fn users_command_handler(
                         message.chat.id,
                         format!(
                             "{} 👮‍♂️",
-                            get_text!(ctx, &author.language, "ADMIN_USERS_MESSAGE").unwrap()
+                            get_text!(ctx, &author.language, "ADMIN_USERS_MESSAGE").unwrap_or_else(
+                                || panic!(
+                                    "`ADMIN_USERS_MESSAGE` translation not found in `{}` language",
+                                    &author.language
+                                )
+                            )
                         ),
                     )
                     .reply_to_message_id(message.id)
@@ -1098,7 +1290,10 @@ async fn users_command_handler(
                 message.chat.id,
                 format!(
                     "{} 👮‍♂️",
-                    get_text!(ctx, &author.language, "PUBLIC_ERROR").unwrap()
+                    get_text!(ctx, &author.language, "PUBLIC_ERROR").unwrap_or_else(|| panic!(
+                        "`PUBLIC_ERROR` translation not found in `{}` language",
+                        &author.language
+                    ))
                 ),
             )
             .reply_to_message_id(message.id)
@@ -1166,7 +1361,12 @@ async fn admin_handler(
                     message.chat.id,
                     format!(
                         "{} 👮‍♂️",
-                        get_text!(ctx, &author.language, "ADMIN_MAIN_MESSAGE").unwrap()
+                        get_text!(ctx, &author.language, "ADMIN_MAIN_MESSAGE").unwrap_or_else(
+                            || panic!(
+                                "`ADMIN_MAIN_MESSAGE` translation not found in `{}` language",
+                                &author.language
+                            )
+                        )
                     ),
                 )
                 .reply_to_message_id(message.id)
@@ -1179,7 +1379,10 @@ async fn admin_handler(
                     message.chat.id,
                     format!(
                         "{} 👮‍♂️",
-                        get_text!(ctx, &author.language, "PUBLIC_ERROR").unwrap()
+                        get_text!(ctx, &author.language, "PUBLIC_ERROR").unwrap_or_else(|| panic!(
+                            "`PUBLIC_ERROR` translation not found in `{}` language",
+                            &author.language
+                        ))
                     ),
                 )
                 .reply_to_message_id(message.id)
@@ -1193,7 +1396,10 @@ async fn admin_handler(
             message.chat.id,
             format!(
                 "{} ✖️",
-                get_text!(ctx, &author.language, "ADMIN_COMMAND_ERROR").unwrap()
+                get_text!(ctx, &author.language, "ADMIN_COMMAND_ERROR").unwrap_or_else(|| panic!(
+                    "`ADMIN_COMMAND_ERROR` translation not found in `{}` language",
+                    &author.language
+                ))
             ),
         )
         .reply_to_message_id(message.id)
@@ -1214,11 +1420,17 @@ fn get_message_text(
         match command {
             "admin" => Some(format!(
                 "{} 👮‍♂️",
-                get_text!(ctx, &author.language, "ADMIN_MAIN_MESSAGE").unwrap()
+                get_text!(ctx, &author.language, "ADMIN_MAIN_MESSAGE").unwrap_or_else(|| panic!(
+                    "`ADMIN_MAIN_MESSAGE` translation not found in `{}` language",
+                    &author.language
+                ))
             )),
             "users" => Some(format!(
                 "{} 👮‍♂️",
-                get_text!(ctx, &author.language, "ADMIN_USERS_MESSAGE").unwrap()
+                get_text!(ctx, &author.language, "ADMIN_USERS_MESSAGE").unwrap_or_else(|| panic!(
+                    "`ADMIN_USERS_MESSAGE` translation not found in `{}` language",
+                    &author.language
+                ))
             )),
             "users-info" => {
                 let user: Option<Users> = Users::get_by_telegram_id(conn, args.next()?.into());
@@ -1227,7 +1439,12 @@ fn get_message_text(
                 } else {
                     Some(
                         get_text!(ctx, &author.language, "USER_NOT_FOUND")
-                            .unwrap()
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "`USER_NOT_FOUND` translation not found in `{}` language",
+                                    &author.language
+                                )
+                            })
                             .to_string(),
                     )
                 }
@@ -1261,7 +1478,7 @@ fn get_keyboard(
                     .expect("page number should be unsigned integer"),
             )
             .ok(),
-            "users-info" => Some(keyboards::admin_users_info_keybard(
+            "users-info" => Some(keyboards::admin_users_info_keyboard(
                 args.nth(1).unwrap_or("0"),
                 &author.language,
             )),
@@ -1336,37 +1553,67 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     vars.insert(
                         "help_help".to_string(),
                         get_text!(ctx, &author.language, "HELP_HELP")
-                            .unwrap()
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "`HELP_HELP` translation not found in `{}` language",
+                                    &author.language
+                                )
+                            })
                             .to_string(),
                     );
                     vars.insert(
                         "help_run".to_string(),
                         get_text!(ctx, &author.language, "RUN_HELP")
-                            .unwrap()
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "`RUN_HELP` translation not found in `{}` language",
+                                    &author.language
+                                )
+                            })
                             .to_string(),
                     );
                     vars.insert(
                         "help_share".to_string(),
                         get_text!(ctx, &author.language, "SHARE_HELP")
-                            .unwrap()
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "`SHARE_HELP` translation not found in `{}` language",
+                                    &author.language
+                                )
+                            })
                             .to_string(),
                     );
                     vars.insert(
                         "help_language".to_string(),
                         get_text!(ctx, &author.language, "LANGUAGE_HELP")
-                            .unwrap()
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "`LANGUAGE_HELP` translation not found in `{}` language",
+                                    &author.language
+                                )
+                            })
                             .to_string(),
                     );
                     vars.insert(
                         "help_id".to_string(),
                         get_text!(ctx, &author.language, "ID_HELP")
-                            .unwrap()
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "`ID_HELP` translation not found in `{}` language",
+                                    &author.language
+                                )
+                            })
                             .to_string(),
                     );
                     vars.insert(
                         "help_info".to_string(),
                         get_text!(ctx, &author.language, "INFO_HELP")
-                            .unwrap()
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "`INFO_HELP` translation not found in `{}` language",
+                                    &author.language
+                                )
+                            })
                             .to_string(),
                     );
 
@@ -1383,7 +1630,12 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                         } else {
                             strfmt(
                                 &get_text!(ctx, &author.language, "HELP_MESSAGE")
-                                    .unwrap()
+                                    .unwrap_or_else(|| {
+                                        panic!(
+                                            "`HELP_MESSAGE` translation not found in `{}` language",
+                                            &author.language
+                                        )
+                                    })
                                     .to_string(),
                                 &vars,
                             )
@@ -1415,7 +1667,12 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                         message.chat.id,
                         strfmt(
                             &get_text!(ctx, &author.language, "START_MESSAGE")
-                                .unwrap()
+                                .unwrap_or_else(|| {
+                                    panic!(
+                                        "`START_MESSAGE` translation not found in `{}` language",
+                                        &author.language
+                                    )
+                                })
                                 .to_string(),
                             &vars,
                         )
@@ -1434,7 +1691,12 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     bot.send_message(
                         message.chat.id,
                         get_text!(ctx, &author.language, "NEW_LANGUAGE_MESSAGE")
-                            .unwrap()
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "`NEW_LANGUAGE_MESSAGE` translation not found in `{}` language",
+                                    &author.language
+                                )
+                            })
                             .to_string()
                             + " 🤖",
                     )
@@ -1480,7 +1742,12 @@ pub async fn message_text_handler(message: Message, bot: AutoSend<Bot>) {
                     message.chat.id,
                     if author.is_ban {
                         get_text!(ctx, &author.language, "BAN_MESSAGE")
-                            .unwrap()
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "`BAN_MESSAGE` translation not found in `{}` language",
+                                    &author.language
+                                )
+                            })
                             .to_string()
                     } else if author.attempts >= author.attempts_maximum {
                         attempt_error_message(&author)
@@ -1612,7 +1879,6 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                         .log_on_error()
                         .await;
                 }
-                // TODO: DRY with gotok and goto
                 "goto" => {
                     let message: &Message = callback_query.message.as_ref().unwrap();
                     bot.edit_message_text(
@@ -1634,16 +1900,10 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                 }
 
                 "admin" => {
-                    admin_callback_handler(
-                        bot,
-                        &mut args,
-                        &author,
-                        &callback_query,
-                        conn,
-                    )
-                    .await
-                    .log_on_error()
-                    .await;
+                    admin_callback_handler(bot, &mut args, &author, &callback_query, conn)
+                        .await
+                        .log_on_error()
+                        .await;
                 }
                 _ => (),
             };
@@ -1651,7 +1911,12 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
             bot.answer_callback_query(callback_query.id)
                 .text(if author.is_ban {
                     get_text!(ctx, &author.language, "BAN_MESSAGE")
-                        .unwrap()
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "`BAN_MESSAGE` translation not found in `{}` language",
+                                &author.language
+                            )
+                        })
                         .to_string()
                 } else if author.attempts >= author.attempts_maximum {
                     attempt_error_message(&author)

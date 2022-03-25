@@ -30,7 +30,15 @@ use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 pub fn repo_keyboard(language: &str) -> InlineKeyboardMarkup {
     let ctx = languages_ctx();
     InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::url(
-        get_text!(ctx, language, "REPOSITORY").unwrap().to_string() + " 🦀",
+        get_text!(ctx, language, "REPOSITORY")
+            .unwrap_or_else(|| {
+                panic!(
+                    "`REPOSITORY` translation not found in `{}` language",
+                    language
+                )
+            })
+            .to_string()
+            + " 🦀",
         Url::parse("https://github.com/TheAwiteb/rpg_bot").unwrap(),
     )]])
 }
@@ -55,24 +63,48 @@ fn option_keyboard(
 
     let mut keyboard: InlineKeyboardMarkup = InlineKeyboardMarkup::new([[
         InlineKeyboardButton::callback(
-            get_text!(ctx, language, "VERSION").unwrap().to_string() + " 📦\u{200B}",
+            get_text!(ctx, language, "VERSION")
+                .unwrap_or_else(|| {
+                    panic!("`VERSION` translation not found in `{}` language", language)
+                })
+                .to_string()
+                + " 📦\u{200B}",
             format!(
                 "print {}",
-                get_text!(ctx, language, "VERSION_OF_CODE").unwrap()
+                get_text!(ctx, language, "VERSION_OF_CODE").unwrap_or_else(|| panic!(
+                    "`VERSION_OF_CODE` translation not found in `{}` language",
+                    language
+                ))
             ) + "_📦\u{200B}",
         ),
         InlineKeyboardButton::callback(
-            get_text!(ctx, language, "MODE").unwrap().to_string() + " 🚀",
+            get_text!(ctx, language, "MODE")
+                .unwrap_or_else(|| {
+                    panic!("`MODE` translation not found in `{}` language", language)
+                })
+                .to_string()
+                + " 🚀",
             format!(
                 "print {}",
-                get_text!(ctx, language, "MODE_OF_CODE").unwrap()
+                get_text!(ctx, language, "MODE_OF_CODE").unwrap_or_else(|| panic!(
+                    "`MODE_OF_CODE` translation not found in `{}` language",
+                    language
+                ))
             ) + "_🚀\u{200B}",
         ),
         InlineKeyboardButton::callback(
-            get_text!(ctx, language, "EDITION").unwrap().to_string() + " ⚡\u{200B}",
+            get_text!(ctx, language, "EDITION")
+                .unwrap_or_else(|| {
+                    panic!("`EDITION` translation not found in `{}` language", language)
+                })
+                .to_string()
+                + " ⚡\u{200B}",
             format!(
                 "print {}",
-                get_text!(ctx, language, "EDITION_OF_CODE").unwrap()
+                get_text!(ctx, language, "EDITION_OF_CODE").unwrap_or_else(|| panic!(
+                    "`EDITION_OF_CODE` translation not found in `{}` language",
+                    language
+                ))
             ) + "_⚡",
         ),
     ]]);
@@ -124,14 +156,20 @@ pub fn view_run_keyboard(
 ) -> InlineKeyboardMarkup {
     let ctx = languages_ctx();
     InlineKeyboardMarkup::new([[InlineKeyboardButton::callback(
-        get_text!(ctx, language, "RUN").unwrap().to_string() + " 🦀⚙️",
+        get_text!(ctx, language, "RUN")
+            .unwrap_or_else(|| panic!("`RUN` translation not found in `{}` language", language))
+            .to_string()
+            + " 🦀⚙️",
         if is_valid_source {
             // if source code is valid, the code will be valid
             format!("viewR {} {}", code.as_ref(), already_use_keyboard)
         } else {
             format!(
                 "print {}",
-                get_text!(ctx, language, "CANNOT_RUN_INVALID_CODE").unwrap()
+                get_text!(ctx, language, "CANNOT_RUN_INVALID_CODE").unwrap_or_else(|| panic!(
+                    "`CANNOT_RUN_INVALID_CODE` translation not found in `{}` language",
+                    language
+                ))
             )
         },
     )]])
@@ -146,14 +184,20 @@ pub fn view_share_keyboard(
     let ctx = languages_ctx();
 
     InlineKeyboardMarkup::new([[InlineKeyboardButton::callback(
-        get_text!(ctx, language, "SHARE").unwrap().to_string() + " 🦀🔗",
+        get_text!(ctx, language, "SHARE")
+            .unwrap_or_else(|| panic!("`SHARE` translation not found in `{}` language", language))
+            .to_string()
+            + " 🦀🔗",
         if is_valid_source {
             // if source code is valid, the code will be valid
             format!("viewS {} {}", code.as_ref(), already_use_keyboard)
         } else {
             format!(
                 "print {}",
-                get_text!(ctx, language, "CANNOT_SHARE_INVALID_CODE").unwrap()
+                get_text!(ctx, language, "CANNOT_SHARE_INVALID_CODE").unwrap_or_else(|| panic!(
+                    "`CANNOT_SHARE_INVALID_CODE` translation not found in `{}` language",
+                    language
+                ))
             )
         },
     )]])
@@ -170,7 +214,10 @@ pub fn run_keyboard(source: SourceCode, language: &str) -> InlineKeyboardMarkup 
         language,
     )
     .append_row([InlineKeyboardButton::callback(
-        get_text!(ctx, language, "RUN").unwrap().to_string() + " 🦀⚙️",
+        get_text!(ctx, language, "RUN")
+            .unwrap_or_else(|| panic!("`RUN` translation not found in `{}` language", language))
+            .to_string()
+            + " 🦀⚙️",
         format!("run {}", source.code),
     )])
 }
@@ -186,7 +233,10 @@ pub fn share_keyboard(source: SourceCode, language: &str) -> InlineKeyboardMarku
         language,
     )
     .append_row([InlineKeyboardButton::callback(
-        get_text!(ctx, language, "SHARE").unwrap().to_string() + " 🦀🔗",
+        get_text!(ctx, language, "SHARE")
+            .unwrap_or_else(|| panic!("`SHARE` translation not found in `{}` language", language))
+            .to_string()
+            + " 🦀🔗",
         format!("share {}", source.code),
     )])
 }
@@ -216,16 +266,34 @@ pub fn admin_main_keybard(language: &str) -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new([
         vec![
             InlineKeyboardButton::callback(
-                format!("{} 👤", get_text!(ctx, language, "USERS").unwrap()),
+                format!(
+                    "{} 👤",
+                    get_text!(ctx, language, "USERS").unwrap_or_else(|| panic!(
+                        "`USERS` translation not found in `{}` language",
+                        language
+                    ))
+                ),
                 "goto users".into(),
             ),
             InlineKeyboardButton::callback(
-                format!("{} ⚙️", get_text!(ctx, language, "SETTINGS").unwrap()),
+                format!(
+                    "{} ⚙️",
+                    get_text!(ctx, language, "SETTINGS").unwrap_or_else(|| panic!(
+                        "`SETTINGS` translation not found in `{}` language",
+                        language
+                    ))
+                ),
                 "goto settings".into(), // TODO: Enable to update config file
             ),
         ],
         vec![InlineKeyboardButton::callback(
-            format!("{} 🔈", get_text!(ctx, language, "BROADCAST").unwrap()),
+            format!(
+                "{} 🔈",
+                get_text!(ctx, language, "BROADCAST").unwrap_or_else(|| panic!(
+                    "`BROADCAST` translation not found in `{}` language",
+                    language
+                ))
+            ),
             "goto broadcast".into(), // TODO: Enable to brodcasts messages
         )],
     ])
@@ -254,7 +322,15 @@ pub fn admin_users_keyboard(
     let keyboard: InlineKeyboardMarkup = InlineKeyboardMarkup::new(
         vec![vec![
             InlineKeyboardButton::callback(
-                get_text!(ctx, language, "USER_INFO").unwrap().to_string() + " 👤",
+                get_text!(ctx, language, "USER_INFO")
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "`USER_INFO` translation not found in `{}` language",
+                            language
+                        )
+                    })
+                    .to_string()
+                    + " 👤",
                 format!(
                     "print {}",
                     get_text!(ctx, language, "USER_INFO_ANSWER")
@@ -264,7 +340,12 @@ pub fn admin_users_keyboard(
                 ),
             ),
             InlineKeyboardButton::callback(
-                get_text!(ctx, language, "BANNED").unwrap().to_string() + " 🚫",
+                get_text!(ctx, language, "BANNED")
+                    .unwrap_or_else(|| {
+                        panic!("`BANNED` translation not found in `{}` language", language)
+                    })
+                    .to_string()
+                    + " 🚫",
                 format!(
                     "print {}",
                     get_text!(ctx, language, "BANNED_STATUS")
@@ -345,12 +426,24 @@ pub fn admin_users_keyboard(
     );
     // Back button (To main admin interface)
     let back_button: InlineKeyboardButton = InlineKeyboardButton::callback(
-        format!("🔙 {}", get_text!(ctx, language, "BACK_BUTTON").unwrap()),
+        format!(
+            "🔙 {}",
+            get_text!(ctx, language, "BACK_BUTTON").unwrap_or_else(|| panic!(
+                "`BACK_BUTTON` translation not found in `{}` language",
+                language
+            ))
+        ),
         "goto admin".to_string(),
     );
     if have_previous || have_next {
         let previous_button = InlineKeyboardButton::callback(
-            format!("⏮️ {}", get_text!(ctx, language, "PREVIOUS_BUTTON").unwrap()),
+            format!(
+                "⏮️ {}",
+                get_text!(ctx, language, "PREVIOUS_BUTTON").unwrap_or_else(|| panic!(
+                    "`PREVIOUS_BUTTON` translation not found in `{}` language",
+                    language
+                ))
+            ),
             format!(
                 "gotok users {}",
                 if page_number.ne(&0) {
@@ -361,7 +454,13 @@ pub fn admin_users_keyboard(
             ),
         );
         let next_button = InlineKeyboardButton::callback(
-            format!("{} ⏭️", get_text!(ctx, language, "NEXT_BUTTON").unwrap()),
+            format!(
+                "{} ⏭️",
+                get_text!(ctx, language, "NEXT_BUTTON").unwrap_or_else(|| panic!(
+                    "`NEXT_BUTTON` translation not found in `{}` language",
+                    language
+                ))
+            ),
             format!("gotok users {}", page_number + 1),
         );
 
@@ -388,11 +487,17 @@ pub fn admin_users_keyboard(
     }
 }
 
-pub fn admin_users_info_keybard(users_page_number: &str, language: &str) -> InlineKeyboardMarkup {
+pub fn admin_users_info_keyboard(users_page_number: &str, language: &str) -> InlineKeyboardMarkup {
     let ctx = languages_ctx();
 
     InlineKeyboardMarkup::new([[InlineKeyboardButton::callback(
-        format!("🔙 {}", get_text!(ctx, language, "BACK_BUTTON").unwrap()),
+        format!(
+            "🔙 {}",
+            get_text!(ctx, language, "BACK_BUTTON").unwrap_or_else(|| panic!(
+                "`BACK_BUTTON` translation not found in `{}` language",
+                language
+            ))
+        ),
         format!("goto users {}", users_page_number),
     )]])
 }
