@@ -911,38 +911,53 @@ fn get_author_id_message(message: &Message, language: &str) -> String {
     }
 }
 
+async fn ban_admin_answer(
+    bot: &AutoSend<Bot>,
+    args: &mut std::vec::IntoIter<&str>,
+    author: &Users,
+    callback_query: &CallbackQuery,
+    answer_fn: fn(i64, &Users, &mut SqliteConnection) -> String,
+    conn: &mut SqliteConnection,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let message: &Message = callback_query.message.as_ref().unwrap();
+    let answer = bot
+        .answer_callback_query(&callback_query.id)
+        .text(answer_fn(
+            args.next()
+                .ok_or("ban command without telegram id")?
+                .parse::<i64>()?,
+            author,
+            conn,
+        ))
+        .send();
+    let keyboard: InlineKeyboardMarkup = keyboards::admin_users_keyboard(
+        conn,
+        author.telegram_id.parse::<i64>()?,
+        &author.language,
+        args.next()
+            .ok_or("ban command without page number")?
+            .parse::<u32>()?,
+    )?;
+    if message.reply_markup().unwrap().inline_keyboard == keyboard.inline_keyboard {
+        answer.await?;
+    } else {
+        try_join!(
+            answer,
+            bot.edit_message_reply_markup(message.chat.id, message.id)
+                .reply_markup(keyboard)
+                .send()
+        )?;
+    }
+    Ok(())
+}
 async fn users_admin_answer(
     bot: &AutoSend<Bot>,
     args: &mut std::vec::IntoIter<&str>,
     author: &Users,
-    message_id: i32,
-    chat_id: i64,
-    query_id: &str,
+    callback_query: &CallbackQuery,
     conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    try_join!(
-        bot.answer_callback_query(query_id)
-            .text(admin_unadmin(
-                args.next()
-                    .ok_or("ban command without telegram id")?
-                    .parse::<i64>()?,
-                author,
-                conn,
-            ))
-            .send(),
-        // FIXME: Dont update if no need to use method as in `update_options` function
-            // that fix `MessageNotModified` Error
-        bot.edit_message_reply_markup(chat_id, message_id)
-            .reply_markup(keyboards::admin_users_keyboard(
-                conn,
-                author.telegram_id.parse::<i64>()?,
-                &author.language,
-                args.next()
-                    .ok_or("ban command without page number")?
-                    .parse::<u32>()?,
-            )?)
-            .send()
-    )?;
+    ban_admin_answer(bot, args, author, callback_query,admin_unadmin, conn).await?;
     Ok(())
 }
 
@@ -950,34 +965,10 @@ async fn users_ban_answer(
     bot: &AutoSend<Bot>,
     args: &mut std::vec::IntoIter<&str>,
     author: &Users,
-    message_id: i32,
-    chat_id: i64,
-    query_id: &str,
+    callback_query: &CallbackQuery,
     conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    try_join!(
-        bot.answer_callback_query(query_id)
-            .text(ban_unban(
-                args.next()
-                    .ok_or("ban command without telegram id")?
-                    .parse::<i64>()?,
-                author,
-                conn,
-            ))
-            .send(),
-        // FIXME: Dont update if no need to use method as in `update_options` function
-            // that fix `MessageNotModified` Error
-        bot.edit_message_reply_markup(chat_id, message_id)
-            .reply_markup(keyboards::admin_users_keyboard(
-                conn,
-                author.telegram_id.parse::<i64>()?,
-                &author.language,
-                args.next()
-                    .ok_or("ban command without page number")?
-                    .parse::<u32>()?,
-            )?)
-            .send()
-    )?;
+    ban_admin_answer(bot, args, author, callback_query,ban_unban, conn).await?;
     Ok(())
 }
 
@@ -1123,9 +1114,7 @@ async fn admin_callback_handler(
     bot: AutoSend<Bot>,
     args: &mut std::vec::IntoIter<&str>,
     author: &Users,
-    query_id: &str,
-    message_id: i32,
-    chat_id: i64,
+    callback_query: &CallbackQuery,
     conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     if let Some(command) = args.next() {
@@ -1133,13 +1122,13 @@ async fn admin_callback_handler(
             if let Some(users_command) = args.next() {
                 match users_command {
                     "ban" => {
-                        users_ban_answer(&bot, args, author, message_id, chat_id, query_id, conn)
+                        users_ban_answer(&bot, args, author, callback_query, conn)
                             .await
                             .log_on_error()
                             .await
                     }
                     "admin" => {
-                        users_admin_answer(&bot, args, author, message_id, chat_id, query_id, conn)
+                        users_admin_answer(&bot, args, author, callback_query, conn)
                             .await
                             .log_on_error()
                             .await
@@ -1649,9 +1638,7 @@ pub async fn callback_handler(bot: AutoSend<Bot>, callback_query: CallbackQuery)
                         bot,
                         &mut args,
                         &author,
-                        &callback_query.id,
-                        message.id,
-                        message.chat.id,
+                        &callback_query,
                         conn,
                     )
                     .await
