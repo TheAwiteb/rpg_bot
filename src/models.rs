@@ -396,6 +396,20 @@ impl Users {
         Ok(())
     }
 
+    /// update `is_admin`
+    pub fn switch_admin_stutes(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
+        use super::schema::users::dsl::{is_admin, users};
+
+        // Switch if the user not banned
+        if !self.is_ban {
+            update(users.find(self.id))
+                .set(is_admin.eq(!self.is_admin))
+                .execute(conn)?;
+            self.is_admin = !self.is_admin;
+        }
+        Ok(())
+    }
+
     /// update `is_ban`, `is_admin`, `ban_date`
     pub fn switch_ban_stutes(&mut self, conn: &mut SqliteConnection) -> DieselResult<()> {
         use super::schema::users::dsl::{ban_date, is_admin, is_ban, users};
