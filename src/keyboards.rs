@@ -294,7 +294,7 @@ pub fn admin_main_keybard(language: &str) -> InlineKeyboardMarkup {
                     language
                 ))
             ),
-            "goto broadcast".into(), // TODO: Enable to brodcasts messages
+            "goto broadcast false true false".into(),
         )],
     ])
 }
@@ -464,21 +464,22 @@ pub fn admin_users_keyboard(
             format!("gotok users {}", page_number + 1),
         );
 
-        let next_back_keyboard = InlineKeyboardMarkup::new(vec![if have_next && have_previous {
-            vec![previous_button, next_button]
-        } else if have_next {
-            vec![next_button]
-        } else {
-            vec![previous_button]
-        }]);
+        let next_previous_keyboard =
+            InlineKeyboardMarkup::new(vec![if have_next && have_previous {
+                vec![previous_button, next_button]
+            } else if have_next {
+                vec![next_button]
+            } else {
+                vec![previous_button]
+            }]);
 
-        let next_back_keyboard = next_back_keyboard.append_to_row(1, back_button);
+        let next_previous_keyboard = next_previous_keyboard.append_to_row(1, back_button);
 
         Ok(InlineKeyboardMarkup::new(
             keyboard
                 .inline_keyboard
                 .into_iter()
-                .chain(next_back_keyboard.inline_keyboard.into_iter()),
+                .chain(next_previous_keyboard.inline_keyboard.into_iter()),
         ))
     } else {
         // 999 is random number
@@ -500,4 +501,76 @@ pub fn admin_users_info_keyboard(users_page_number: &str, language: &str) -> Inl
         ),
         format!("goto users {}", users_page_number),
     )]])
+}
+
+pub fn broadcast_interface(
+    pin: bool,
+    sound: bool,
+    forward: bool,
+    language: &str,
+) -> InlineKeyboardMarkup {
+    let ctx = languages_ctx();
+    let forward_word: String = get_text!(ctx, language, "FORWARD_WORD")
+        .unwrap_or_else(|| {
+            panic!(
+                "`FORWARD_WORD` translation not found in `{}` language",
+                language
+            )
+        })
+        .to_string();
+    let pin_word: String = get_text!(ctx, language, "PIN_WORD")
+        .unwrap_or_else(|| {
+            panic!(
+                "`PIN_WORD` translation not found in `{}` language",
+                language
+            )
+        })
+        .to_string();
+    let sound_word: String = get_text!(ctx, language, "SOUND_WORD")
+        .unwrap_or_else(|| {
+            panic!(
+                "`SOUND_WORD` translation not found in `{}` language",
+                language
+            )
+        })
+        .to_string();
+    let send_word: String = get_text!(ctx, language, "SEND_WORD")
+        .unwrap_or_else(|| {
+            panic!(
+                "`SEND_WORD` translation not found in `{}` language",
+                language
+            )
+        })
+        .to_string();
+
+    InlineKeyboardMarkup::new([
+        vec![
+            InlineKeyboardButton::callback(
+                forward_word + if forward { " ✔" } else { " ✖" },
+                format!("admin broadcast forward {} {} {}", pin, sound, !forward),
+            ),
+            InlineKeyboardButton::callback(
+                pin_word + if pin { " ✔" } else { " ✖" },
+                format!("admin broadcast pin {} {} {}", !pin, sound, forward),
+            ),
+            InlineKeyboardButton::callback(
+                sound_word + if sound { " ✔" } else { " ✖" },
+                format!("admin broadcast sound {} {} {}", pin, !sound, forward),
+            ),
+        ],
+        vec![InlineKeyboardButton::callback(
+            send_word + " 🪄",
+            format!("admin broadcast send {} {} {}", pin, sound, forward),
+        )],
+        vec![InlineKeyboardButton::callback(
+            format!(
+                "🔙 {}",
+                get_text!(ctx, language, "BACK_BUTTON").unwrap_or_else(|| panic!(
+                    "`BACK_BUTTON` translation not found in `{}` language",
+                    language
+                ))
+            ),
+            "goto admin".to_owned(),
+        )],
+    ])
 }

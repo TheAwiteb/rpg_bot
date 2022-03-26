@@ -1192,6 +1192,98 @@ pub async fn command_handler(
     Ok(())
 }
 
+fn broadcast_message(language: &str) -> String {
+    let ctx = languages_ctx();
+    let mut vars: HashMap<String, String> = HashMap::new();
+    vars.insert(
+        "sound_word".to_string(),
+        get_text!(ctx, language, "SOUND_WORD")
+            .unwrap_or_else(|| {
+                panic!(
+                    "`SOUND_WORD` translation not found in `{}` language",
+                    language
+                )
+            })
+            .to_string(),
+    );
+    vars.insert(
+        "pin_word".to_string(),
+        get_text!(ctx, language, "PIN_WORD")
+            .unwrap_or_else(|| {
+                panic!(
+                    "`PIN_WORD` translation not found in `{}` language",
+                    language
+                )
+            })
+            .to_string(),
+    );
+    vars.insert(
+        "forward_word".to_string(),
+        get_text!(ctx, language, "FORWARD_WORD")
+            .unwrap_or_else(|| {
+                panic!(
+                    "`FORWARD_WORD` translation not found in `{}` language",
+                    language
+                )
+            })
+            .to_string(),
+    );
+    strfmt(
+        &get_text!(ctx, language, "BROADCAST_MESSAGE")
+            .unwrap_or_else(|| {
+                panic!(
+                    "`BROADCAST_MESSAGE` translation not found in `{}` language",
+                    language
+                )
+            })
+            .to_string(),
+        &vars,
+    )
+    .unwrap()
+}
+
+async fn broadcast_command_handler(
+    bot: &AutoSend<Bot>,
+    message: &Message,
+    author: &Users,
+    args: &mut std::vec::IntoIter<&str>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let ctx = languages_ctx();
+    if let Some(_broadcast_command) = args.next() {
+        todo!("Broadcast commands is (send, forward) args is (pin/unpin, sound/unsound), use default values")
+    } else {
+        // Check if the chat is private
+        if message.chat.is_private() {
+            bot.send_message(message.chat.id, broadcast_message(&author.language))
+                .reply_to_message_id(message.id)
+                .reply_markup(keyboards::broadcast_interface(
+                    // This is default values
+                    false,
+                    true,
+                    false,
+                    &author.language,
+                ))
+                .send()
+                .await?;
+        } else {
+            bot.send_message(
+                message.chat.id,
+                format!(
+                    "{} 👮‍♂️",
+                    get_text!(ctx, &author.language, "PUBLIC_ERROR").unwrap_or_else(|| panic!(
+                        "`PUBLIC_ERROR` translation not found in `{}` language",
+                        &author.language
+                    ))
+                ),
+            )
+            .reply_to_message_id(message.id)
+            .send()
+            .await?;
+        }
+    };
+    Ok(())
+}
+
 async fn users_command_handler(
     bot: &AutoSend<Bot>,
     message: &Message,
@@ -1313,24 +1405,38 @@ async fn admin_callback_handler(
     conn: &mut SqliteConnection,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     if let Some(command) = args.next() {
-        if command == "users" {
-            if let Some(users_command) = args.next() {
-                match users_command {
-                    "ban" => {
-                        users_ban_answer(&bot, args, author, callback_query, conn)
-                            .await
-                            .log_on_error()
-                            .await
+        match command {
+            "users" => {
+                if let Some(users_command) = args.next() {
+                    match users_command {
+                        "ban" => users_ban_answer(&bot, args, author, callback_query, conn).await?,
+                        "admin" => {
+                            users_admin_answer(&bot, args, author, callback_query, conn).await?
+                        }
+                        _ => {}
                     }
-                    "admin" => {
-                        users_admin_answer(&bot, args, author, callback_query, conn)
-                            .await
-                            .log_on_error()
-                            .await
-                    }
-                    _ => {}
                 }
             }
+            "broadcast" => {
+                let message: &Message = callback_query.message.as_ref().unwrap();
+                if let Some(broadcast_command) = args.next() {
+                    match broadcast_command {
+                        "send" => todo!("Receive the message from user and send it"),
+                        _ => {
+                            bot.edit_message_reply_markup(message.chat.id, message.id)
+                                .reply_markup(keyboards::broadcast_interface(
+                                    args.next().unwrap().parse()?,
+                                    args.next().unwrap().parse()?,
+                                    args.next().unwrap().parse()?,
+                                    &author.language,
+                                ))
+                                .send()
+                                .await?;
+                        }
+                    }
+                }
+            }
+            _ => (),
         }
     };
     Ok(())
@@ -1348,11 +1454,13 @@ async fn admin_handler(
     if author.is_admin {
         // Handel the admin commands
         if let Some(admin_command) = args.next() {
-            if admin_command.eq("users") {
-                users_command_handler(&bot, &message, &author, &mut args, conn).await?;
-            } else {
-                todo!("broadcast, settings");
-            };
+            match admin_command {
+                "users" => users_command_handler(&bot, &message, &author, &mut args, conn).await?,
+                "broadcast" => {
+                    broadcast_command_handler(&bot, &message, &author, &mut args).await?
+                }
+                _ => todo!("settings"),
+            }
         } else {
             // Send main admin interface if there no arguments
             // Check if the chat is private
@@ -1449,6 +1557,7 @@ fn get_message_text(
                     )
                 }
             }
+            "broadcast" => Some(broadcast_message(&author.language)),
             _ => None,
         }
     } else {
@@ -1480,6 +1589,12 @@ fn get_keyboard(
             .ok(),
             "users-info" => Some(keyboards::admin_users_info_keyboard(
                 args.nth(1).unwrap_or("0"),
+                &author.language,
+            )),
+            "broadcast" => Some(keyboards::broadcast_interface(
+                args.next()?.parse().ok()?,
+                args.next()?.parse().ok()?,
+                args.next()?.parse().ok()?,
                 &author.language,
             )),
             _ => None,
