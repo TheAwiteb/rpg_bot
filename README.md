@@ -1,3 +1,5 @@
+Deprecation Notice: This project is no longer maintained.
+
 <div align="center">
   <img width=300 src="https://rustacean.net/assets/rustacean-flat-happy.png">
   <h1>RPG_BOT (Rust Playground Bot)</h1>
